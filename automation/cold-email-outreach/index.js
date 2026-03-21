@@ -49,6 +49,10 @@ async function main() {
 
 async function runBatch(deps) {
   console.log(`Starting outreach run at ${new Date().toISOString()}`);
+  if (!config.sendingEnabled) {
+    console.log('Sending disabled; workflow remains prepared for later activation.');
+    return;
+  }
   try {
     const leads = await findLeads(config);
     const sentSet = await readEmailSet(config.sentSheetId, config.sentSheetName);
@@ -197,6 +201,8 @@ function loadConfig() {
     location: env.LOCATION || 'Philadelphia, PA',
     dailyLimit: Number(env.DAILY_LIMIT || 10),
     runOnce: env.RUN_ONCE === 'true',
+    schedulerEnabled: env.SCHEDULER_ENABLED === 'true',
+    sendingEnabled: env.SENDING_ENABLED === 'true',
     testTargetEmail: env.TEST_TARGET_EMAIL || '',
     maxSends: Number(env.MAX_SENDS || 1),
     gogKeyringPassword: env.GOG_KEYRING_PASSWORD || 'OpenClawPass',
@@ -488,9 +494,11 @@ Rules:
 - Keep the body concise and easy to skim
 - The final signoff must always be exactly:
 
+Talk soon,
 Ali
 Scalia Growth
 https://scaliagrowth.com
+- The body must end with that exact signoff and no variation
 
 Subject line rules:
 - Personalized
@@ -619,6 +627,11 @@ function truncateText(text = '', max = 12000) {
 
 main().catch(error => {
   console.error('Automation crashed:', error);
+  process.exit(1);
+});
+it(1);
+});
+tomation crashed:', error);
   process.exit(1);
 });
 it(1);
