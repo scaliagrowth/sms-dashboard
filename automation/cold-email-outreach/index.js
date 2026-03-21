@@ -571,8 +571,26 @@ async function sendEmail(transporter, lead) {
 
 async function appendSentEmail(lead) {
   try {
-    const values = JSON.stringify([[lead.email, lead.businessName, lead.subject, new Date().toISOString()]]);
-    await runGog(['sheets', 'append', config.sentSheetId, `${config.sentSheetName}!A:D`, '--values-json', values, '--insert', 'INSERT_ROWS']);
+    const values = JSON.stringify([[
+      lead.email || '',
+      lead.businessName || '',
+      lead.subject || '',
+      lead.body || '',
+      new Date().toISOString(),
+      'sent',
+      lead.website || '',
+      lead.location || '',
+    ]]);
+    await runGog([
+      'sheets',
+      'append',
+      config.sentSheetId,
+      `${config.sentSheetName}!A:H`,
+      '--values-json',
+      values,
+      '--insert',
+      'INSERT_ROWS',
+    ]);
   } catch (error) {
     console.warn('Failed to record sent email:', error.message);
   }
