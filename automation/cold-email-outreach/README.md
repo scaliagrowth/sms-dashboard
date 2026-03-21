@@ -29,9 +29,11 @@ npm install
 
 ## Running
 
-- `npm run start` executes the workflow immediately and keeps the cron scheduler running on weekdays at 7 AM ET.
+- `npm run start` executes the workflow entrypoint.
+- `SCHEDULER_ENABLED=false` keeps the weekday cron inactive until launch.
+- `SENDING_ENABLED=false` blocks all SMTP sends until you deliberately enable launch mode.
 - Set `RUN_ONCE=true` in `.env` if you want a single execution without the scheduler.
-- `TEST_TARGET_EMAIL` can redirect every send to a single inbox (like `scaliagrowth@gmail.com`) while the logs continue to reference the original lead.
+- `TEST_TARGET_EMAIL` can redirect every send to a single inbox later if needed, but it is currently blank by default.
 - The script already logs each step, including search results, delay waits, SMTP success/failure, and Google Sheets updates.
 
 ## Original behavior preserved

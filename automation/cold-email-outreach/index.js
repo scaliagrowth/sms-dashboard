@@ -33,6 +33,11 @@ async function main() {
     process.exit(0);
   }
 
+  if (!config.schedulerEnabled) {
+    console.log('Scheduler disabled; workflow is ready but inactive.');
+    return;
+  }
+
   cron.schedule(
     '0 7 * * 1-5',
     () => runBatch({ transporter }).catch(err => console.error('Scheduled run failed:', err)),
@@ -615,4 +620,6 @@ function truncateText(text = '', max = 12000) {
 main().catch(error => {
   console.error('Automation crashed:', error);
   process.exit(1);
+});
+it(1);
 });
