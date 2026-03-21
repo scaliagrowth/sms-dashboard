@@ -192,7 +192,7 @@ function loadConfig() {
     smtpPort: Number(env.SMTP_PORT || 465),
     smtpUser: env.SMTP_USERNAME || 'ali@scaliagrowth.com',
     smtpPass: env.SMTP_PASSWORD || '',
-    smtpFrom: env.SMTP_FROM || env.SMTP_USERNAME || 'ali@scaliagrowth.com',
+    smtpFrom: env.SMTP_FROM || '"Ali | Scalia Growth" <ali@scaliagrowth.com>',
     sentSheetId: env.SENT_SHEET_ID || '1s3gUHXoZcuIK52jpJNv-3oK0I32QvaEnUG0UgBzPpIc',
     sentSheetName: 'sent_emails',
     blacklistSheetId: env.BLACKLIST_SHEET_ID || '1kcl05lM0Z15BKhDTugkviexOrkWAWOJLYq7FyMgMhr8',
