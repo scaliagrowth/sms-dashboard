@@ -1,10 +1,33 @@
 import { formatPhoneDisplay } from '@/lib/phone';
-import type { ConversationDetail } from '@/lib/types';
+import type { ConversationDetail, MessageItem } from '@/lib/types';
 
 type Props = {
   detail: ConversationDetail | null;
   loading: boolean;
 };
+
+function getStatusLabel(message: MessageItem): string {
+  if (message.direction === 'inbound') return 'Received';
+
+  const status = (message.status || '').toLowerCase();
+
+  switch (status) {
+    case 'delivered':
+      return 'Delivered';
+    case 'sent':
+      return 'Sent';
+    case 'queued':
+      return 'Queued';
+    case 'sending':
+      return 'Sending';
+    case 'undelivered':
+      return 'Undelivered';
+    case 'failed':
+      return 'Failed';
+    default:
+      return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Sent';
+  }
+}
 
 export function ChatThread({ detail, loading }: Props) {
   if (loading) {
@@ -22,6 +45,10 @@ export function ChatThread({ detail, loading }: Props) {
           <h2>{detail.lead?.businessName || formatPhoneDisplay(detail.conversation.phone)}</h2>
           <p>{formatPhoneDisplay(detail.conversation.phone)}</p>
         </div>
+        <div className="threadHeaderStatus">
+          <span className="threadHeaderHint">SMS status</span>
+          <strong>Delivery only — no true read receipt</strong>
+        </div>
       </div>
 
       <div className="messageList">
@@ -30,7 +57,7 @@ export function ChatThread({ detail, loading }: Props) {
             <div key={message.sid} className={`messageBubble ${message.direction}`}>
               <div className="messageBody">{message.body || '(empty message)'}</div>
               <div className="messageMeta">
-                <span>{message.direction === 'inbound' ? 'Lead' : 'You'}</span>
+                <span>{message.direction === 'inbound' ? 'Lead' : 'You'} • {getStatusLabel(message)}</span>
                 <span>{new Date(message.dateCreated).toLocaleString()}</span>
               </div>
             </div>

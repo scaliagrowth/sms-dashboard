@@ -11,7 +11,10 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
   return (
     <aside className="sidebar">
       <div className="sidebarHeader">
-        <h2>Inbox</h2>
+        <div>
+          <h2>Inbox</h2>
+          <span>Choose a conversation</span>
+        </div>
         <span>{conversations.length} leads</span>
       </div>
 

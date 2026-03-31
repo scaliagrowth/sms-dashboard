@@ -33,7 +33,7 @@ export function InboxLayout() {
   async function loadConversation(phone: string) {
     try {
       setLoadingDetail(true);
-      const response = await fetch(`/api/conversations/${encodeURIComponent(phone)}`);
+      const response = await fetch(`/api/conversations/${encodeURIComponent(phone)}`, { cache: 'no-store' });
       if (!response.ok) throw new Error('Failed to load conversation.');
       const data = await response.json();
       setDetail(data);
