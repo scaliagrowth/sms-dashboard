@@ -20,13 +20,17 @@ function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolea
   if (lastInboundIndex === -1) return false;
 
   const inboundMessage = messages[messages.length - 1 - lastInboundIndex];
+  const inboundAt = new Date(inboundMessage.dateCreated).getTime();
   const hasOutboundAfterInbound = messages.some(
-    (message) =>
-      message.direction === 'outbound' &&
-      new Date(message.dateCreated).getTime() > new Date(inboundMessage.dateCreated).getTime(),
+    (message) => message.direction === 'outbound' && new Date(message.dateCreated).getTime() > inboundAt,
   );
 
-  return !hasOutboundAfterInbound;
+  if (hasOutboundAfterInbound) return false;
+
+  const handledAt = lead?.handledAfterMsg2At ? new Date(lead.handledAfterMsg2At).getTime() : 0;
+  if (handledAt && handledAt >= inboundAt) return false;
+
+  return true;
 }
 
 export async function getConversationSummaries(): Promise<ConversationSummary[]> {
