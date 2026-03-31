@@ -2,6 +2,8 @@ import { google } from 'googleapis';
 import { normalizePhone } from '@/lib/phone';
 import type { LeadRow } from '@/lib/types';
 
+const HANDLED_MARKER = 'handled_after_msg2';
+
 const SHEET_NAME = 'Sheet1';
 
 function getEnv(name: string): string {
@@ -37,7 +39,19 @@ function getSheetsClient() {
   return google.sheets({ version: 'v4', auth });
 }
 
+function extractHandledAfterMsg2At(notes: string): string | null {
+  const match = notes.match(/\[handled_after_msg2:\s*([^\]]+)\]/i);
+  return match?.[1]?.trim() ?? null;
+}
+
+function upsertHandledMarker(notes: string, isoTimestamp: string): string {
+  const cleaned = notes.replace(/\s*\[handled_after_msg2:\s*[^\]]+\]/gi, '').trim();
+  return `${cleaned}${cleaned ? ' ' : ''}[${HANDLED_MARKER}: ${isoTimestamp}]`.trim();
+}
+
 function toLeadRow(values: string[], rowNumber: number): LeadRow {
+  const notes = values[13] ?? '';
+
   return {
     rowNumber,
     businessName: values[1] ?? '',
@@ -53,7 +67,8 @@ function toLeadRow(values: string[], rowNumber: number): LeadRow {
     zoomBooked: values[10] ?? '',
     showed: values[11] ?? '',
     closed: values[12] ?? '',
-    notes: values[13] ?? '',
+    notes,
+    handledAfterMsg2At: extractHandledAfterMsg2At(notes),
   };
 }
 
@@ -120,6 +135,8 @@ export async function updateLeadStatusFields(
 
   const sheets = getSheetsClient();
   const spreadsheetId = getEnv('GOOGLE_SHEET_ID');
+  const handledAt = new Date().toISOString();
+  const notesWithMarker = upsertHandledMarker(lead.notes || '', handledAt);
 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId,
@@ -134,6 +151,10 @@ export async function updateLeadStatusFields(
           range: `${SHEET_NAME}!J${lead.rowNumber}`,
           values: [[settingCallBooked]],
         },
+        {
+          range: `${SHEET_NAME}!N${lead.rowNumber}`,
+          values: [[notesWithMarker]],
+        },
       ],
     },
   });
@@ -142,5 +163,7 @@ export async function updateLeadStatusFields(
     ...lead,
     responseType,
     settingCallBooked,
+    notes: notesWithMarker,
+    handledAfterMsg2At: handledAt,
   };
 }

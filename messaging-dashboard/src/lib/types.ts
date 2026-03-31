@@ -14,6 +14,7 @@ export type LeadRow = {
   showed: string;
   closed: string;
   notes: string;
+  handledAfterMsg2At?: string | null;
 };
 
 export type MessageItem = {
