@@ -14,15 +14,18 @@ export function InboxLayout() {
   const [loadingList, setLoadingList] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mobileView, setMobileView] = useState<'list' | 'thread'>('list');
+  const [isMobile, setIsMobile] = useState(false);
 
   async function loadConversations() {
     try {
       setLoadingList(true);
-      const response = await fetch('/api/conversations');
+      const response = await fetch('/api/conversations', { cache: 'no-store' });
       if (!response.ok) throw new Error('Failed to load conversations.');
       const data = await response.json();
       setConversations(data.conversations || []);
       setSelectedPhone((current) => current || data.conversations?.[0]?.phone || null);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load conversations.');
     } finally {
@@ -33,10 +36,11 @@ export function InboxLayout() {
   async function loadConversation(phone: string) {
     try {
       setLoadingDetail(true);
-      const response = await fetch(`/api/conversations/${encodeURIComponent(phone)}`);
+      const response = await fetch(`/api/conversations/${encodeURIComponent(phone)}`, { cache: 'no-store' });
       if (!response.ok) throw new Error('Failed to load conversation.');
       const data = await response.json();
       setDetail(data);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load conversation.');
     } finally {
@@ -45,7 +49,12 @@ export function InboxLayout() {
   }
 
   useEffect(() => {
+    const updateViewport = () => setIsMobile(window.innerWidth <= 760);
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
     void loadConversations();
+
+    return () => window.removeEventListener('resize', updateViewport);
   }, []);
 
   useEffect(() => {
@@ -56,12 +65,33 @@ export function InboxLayout() {
     }
   }, [selectedPhone]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      void loadConversations();
+      if (selectedPhone) {
+        void loadConversation(selectedPhone);
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [selectedPhone]);
+
   async function refreshSelectedConversation() {
     await loadConversations();
     if (selectedPhone) {
       await loadConversation(selectedPhone);
     }
   }
+
+  function handleSelectConversation(phone: string) {
+    setSelectedPhone(phone);
+    if (typeof window !== 'undefined' && window.innerWidth <= 760) {
+      setMobileView('thread');
+    }
+  }
+
+  const showList = !isMobile || mobileView === 'list';
+  const showThread = !isMobile || mobileView === 'thread';
 
   return (
     <main className="appShell">
@@ -75,18 +105,31 @@ export function InboxLayout() {
       {error ? <div className="errorBanner">{error}</div> : null}
 
       <div className="dashboardGrid">
-        {loadingList ? (
-          <aside className="sidebar emptyState">Loading inbox…</aside>
-        ) : (
-          <ConversationList conversations={conversations} selectedPhone={selectedPhone} onSelect={setSelectedPhone} />
-        )}
+        {showList ? (
+          loadingList ? (
+            <aside className="sidebar emptyState">Loading inbox…</aside>
+          ) : (
+            <ConversationList conversations={conversations} selectedPhone={selectedPhone} onSelect={handleSelectConversation} />
+          )
+        ) : null}
 
-        <div className="centerColumn">
-          <ChatThread detail={detail} loading={loadingDetail} />
-          <ReplyBox phone={selectedPhone} onSent={refreshSelectedConversation} />
-        </div>
+        {showThread ? (
+          <div className="centerColumn threadColumnMobile">
+            {isMobile ? (
+              <div className="mobileThreadBar">
+                <button className="backButton" onClick={() => setMobileView('list')}>
+                  ← Back to inbox
+                </button>
+                {detail?.conversation?.needsResponse ? <span className="needsResponseBadge">Needs response</span> : null}
+              </div>
+            ) : null}
+            <ChatThread detail={detail} loading={loadingDetail} />
+            <ReplyBox phone={selectedPhone} onSent={refreshSelectedConversation} />
+            {isMobile ? <LeadDetailsPanel detail={detail} /> : null}
+          </div>
+        ) : null}
 
-        <LeadDetailsPanel detail={detail} />
+        {!isMobile ? <LeadDetailsPanel detail={detail} /> : null}
       </div>
     </main>
   );
