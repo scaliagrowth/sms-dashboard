@@ -17,6 +17,7 @@ export function ReplyBox({ phone, onSent }: Props) {
       setSending(true);
       setError(null);
       const response = await fetch('/api/messages/send', {
+        cache: 'no-store',
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, message }),

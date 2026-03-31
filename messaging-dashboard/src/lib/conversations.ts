@@ -1,7 +1,7 @@
 import { normalizePhone } from '@/lib/phone';
 import { getLeads, findLeadByPhone } from '@/lib/sheets';
 import { listMessagesForNumber, listRecentMessages } from '@/lib/twilio';
-import type { ConversationDetail, ConversationSummary, LeadRow } from '@/lib/types';
+import type { ConversationDetail, ConversationSummary, LeadRow, MessageItem } from '@/lib/types';
 
 function getConversationPhone(message: { from: string; to: string }, twilioNumber: string) {
   const from = normalizePhone(message.from);
@@ -9,8 +9,28 @@ function getConversationPhone(message: { from: string; to: string }, twilioNumbe
   return from === twilioNumber ? to : from;
 }
 
+function hasMessage2Sent(lead: LeadRow | null): boolean {
+  return Boolean(lead?.message2Sent && String(lead.message2Sent).trim());
+}
+
+function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolean {
+  if (!hasMessage2Sent(lead) || !messages.length) return false;
+
+  const lastInboundIndex = [...messages].reverse().findIndex((message) => message.direction === 'inbound');
+  if (lastInboundIndex === -1) return false;
+
+  const inboundMessage = messages[messages.length - 1 - lastInboundIndex];
+  const hasOutboundAfterInbound = messages.some(
+    (message) =>
+      message.direction === 'outbound' &&
+      new Date(message.dateCreated).getTime() > new Date(inboundMessage.dateCreated).getTime(),
+  );
+
+  return !hasOutboundAfterInbound;
+}
+
 export async function getConversationSummaries(): Promise<ConversationSummary[]> {
-  const [messages, leads] = await Promise.all([listRecentMessages(200), getLeads()]);
+  const [recentMessages, leads] = await Promise.all([listRecentMessages(200), getLeads()]);
   const twilioNumber = normalizePhone(process.env.TWILIO_PHONE_NUMBER ?? '');
   const leadMap = new Map<string, LeadRow>();
 
@@ -20,16 +40,24 @@ export async function getConversationSummaries(): Promise<ConversationSummary[]>
     }
   }
 
-  const conversationMap = new Map<string, ConversationSummary>();
-
-  for (const message of messages) {
+  const groupedMessages = new Map<string, MessageItem[]>();
+  for (const message of recentMessages) {
     const phone = getConversationPhone(message, twilioNumber);
     if (!phone) continue;
+    const existing = groupedMessages.get(phone) ?? [];
+    existing.push(message);
+    groupedMessages.set(phone, existing);
+  }
 
-    const existing = conversationMap.get(phone);
-    if (existing) continue;
+  const conversationMap = new Map<string, ConversationSummary>();
 
+  for (const [phone, messages] of groupedMessages.entries()) {
+    const sortedMessages = [...messages].sort(
+      (a, b) => new Date(a.dateCreated).getTime() - new Date(b.dateCreated).getTime(),
+    );
+    const latestMessage = sortedMessages[sortedMessages.length - 1] ?? null;
     const lead = leadMap.get(phone) ?? null;
+
     conversationMap.set(phone, {
       phone,
       normalizedPhone: phone,
@@ -38,9 +66,10 @@ export async function getConversationSummaries(): Promise<ConversationSummary[]>
       replied: lead?.replied ?? null,
       responseType: lead?.responseType ?? null,
       replyText: lead?.replyText ?? null,
-      lastMessageAt: message.dateCreated,
-      lastMessageBody: message.body,
-      lastDirection: message.direction,
+      lastMessageAt: latestMessage?.dateCreated ?? null,
+      lastMessageBody: latestMessage?.body ?? null,
+      lastDirection: latestMessage?.direction ?? null,
+      needsResponse: getNeedsResponse(sortedMessages, lead),
     });
   }
 
@@ -57,11 +86,16 @@ export async function getConversationSummaries(): Promise<ConversationSummary[]>
         lastMessageAt: null,
         lastMessageBody: null,
         lastDirection: null,
+        needsResponse: false,
       });
     }
   }
 
   return Array.from(conversationMap.values()).sort((a, b) => {
+    if (a.needsResponse !== b.needsResponse) {
+      return a.needsResponse ? -1 : 1;
+    }
+
     const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
     const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
     return bTime - aTime;
@@ -70,11 +104,12 @@ export async function getConversationSummaries(): Promise<ConversationSummary[]>
 
 export async function getConversationDetail(phone: string): Promise<ConversationDetail> {
   const [lead, messages] = await Promise.all([findLeadByPhone(phone), listMessagesForNumber(phone, 100)]);
+  const normalizedPhone = normalizePhone(phone);
 
   return {
     conversation: {
-      phone: normalizePhone(phone),
-      normalizedPhone: normalizePhone(phone),
+      phone: normalizedPhone,
+      normalizedPhone,
       businessName: lead?.businessName ?? null,
       niche: lead?.niche ?? null,
       replied: lead?.replied ?? null,
@@ -83,6 +118,7 @@ export async function getConversationDetail(phone: string): Promise<Conversation
       lastMessageAt: messages[messages.length - 1]?.dateCreated ?? null,
       lastMessageBody: messages[messages.length - 1]?.body ?? null,
       lastDirection: messages[messages.length - 1]?.direction ?? null,
+      needsResponse: getNeedsResponse(messages, lead),
     },
     lead,
     messages,

@@ -37,6 +37,7 @@ export type ConversationSummary = {
   lastMessageAt: string | null;
   lastMessageBody: string | null;
   lastDirection: 'inbound' | 'outbound' | null;
+  needsResponse: boolean;
 };
 
 export type ConversationDetail = {
