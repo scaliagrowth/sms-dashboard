@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { updateLeadReply } from '@/lib/sheets';
 import { sendSms } from '@/lib/twilio';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();

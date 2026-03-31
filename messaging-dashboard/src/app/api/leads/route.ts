@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getLeads } from '@/lib/sheets';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const leads = await getLeads();

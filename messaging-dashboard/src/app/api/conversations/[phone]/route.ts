@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getConversationDetail } from '@/lib/conversations';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function GET(_: Request, { params }: { params: { phone: string } }) {
   try {
     const detail = await getConversationDetail(decodeURIComponent(params.phone));

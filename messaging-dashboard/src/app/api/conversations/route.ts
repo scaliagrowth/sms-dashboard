@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getConversationSummaries } from '@/lib/conversations';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const conversations = await getConversationSummaries();
