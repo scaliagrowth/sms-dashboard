@@ -109,3 +109,38 @@ export async function updateLeadReply(phone: string, replyText: string): Promise
     replyText,
   };
 }
+
+export async function updateLeadStatusFields(
+  phone: string,
+  responseType: string,
+  settingCallBooked: string,
+): Promise<LeadRow | null> {
+  const lead = await findLeadByPhone(phone);
+  if (!lead) return null;
+
+  const sheets = getSheetsClient();
+  const spreadsheetId = getEnv('GOOGLE_SHEET_ID');
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: [
+        {
+          range: `${SHEET_NAME}!G${lead.rowNumber}`,
+          values: [[responseType]],
+        },
+        {
+          range: `${SHEET_NAME}!J${lead.rowNumber}`,
+          values: [[settingCallBooked]],
+        },
+      ],
+    },
+  });
+
+  return {
+    ...lead,
+    responseType,
+    settingCallBooked,
+  };
+}
