@@ -501,6 +501,10 @@ button, textarea, select {
 }
 
 @media (max-width: 760px) {
+  .filterChips {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .appShell {
     padding: 14px;
     height: auto;

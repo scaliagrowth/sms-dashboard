@@ -46,7 +46,7 @@ export function ReplyBox({ phone, onSent }: Props) {
         disabled={!phone || sending}
       />
       <div className="replyActions">
-        {error ? <span className="errorText">{error}</span> : <span className="helperText">Manual replies update Sheet1 columns F and H only.</span>}
+        {error ? <span className="errorText">{error}</span> : <span className="helperText" />}
         <button onClick={handleSend} disabled={!phone || sending || !message.trim()}>
           {sending ? 'Sending…' : 'Send SMS'}
         </button>
