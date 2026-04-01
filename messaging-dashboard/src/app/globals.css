@@ -252,6 +252,21 @@ button, textarea, select {
   flex-direction: column;
   flex: 1;
   overflow: hidden;
+  position: relative;
+}
+
+.threadPanel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 22px;
+  padding: 1px;
+  background: var(--gradient);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.35;
 }
 
 .messageList {
@@ -510,6 +525,30 @@ button, textarea, select {
   .replyActions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .messageBubble {
+    max-width: 92%;
+  }
+
+  .conversationMetaRow,
+  .threadHeader,
+  .mobileThreadBar,
+  .sidebarHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .threadHeaderStatus {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .backButton {
+    width: 100%;
+  }
+}
+stretch;
   }
 
   .messageBubble {
