@@ -1,5 +1,5 @@
 import { normalizePhone } from '@/lib/phone';
-import { getLeads, findLeadByPhone } from '@/lib/sheets';
+import { findLeadByPhone, getLeads } from '@/lib/sheets';
 import { listMessagesForNumber, listRecentMessages } from '@/lib/twilio';
 import type { ConversationDetail, ConversationSummary, LeadRow, MessageItem } from '@/lib/types';
 
@@ -9,18 +9,20 @@ function getConversationPhone(message: { from: string; to: string }, twilioNumbe
   return from === twilioNumber ? to : from;
 }
 
-function hasMessage2Sent(lead: LeadRow | null): boolean {
-  return Boolean(lead?.message2Sent && String(lead.message2Sent).trim());
-}
-
 function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolean {
-  if (!hasMessage2Sent(lead) || !messages.length) return false;
+  if (!messages.length) return false;
 
   const lastInboundIndex = [...messages].reverse().findIndex((message) => message.direction === 'inbound');
   if (lastInboundIndex === -1) return false;
 
   const inboundMessage = messages[messages.length - 1 - lastInboundIndex];
   const inboundAt = new Date(inboundMessage.dateCreated).getTime();
+  const outboundBeforeInbound = messages.filter(
+    (message) => message.direction === 'outbound' && new Date(message.dateCreated).getTime() < inboundAt,
+  ).length;
+
+  if (outboundBeforeInbound < 3) return false;
+
   const hasOutboundAfterInbound = messages.some(
     (message) => message.direction === 'outbound' && new Date(message.dateCreated).getTime() > inboundAt,
   );
