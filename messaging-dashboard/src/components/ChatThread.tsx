@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { formatPhoneDisplay } from '@/lib/phone';
 import type { ConversationDetail, MessageItem } from '@/lib/types';
 
@@ -30,6 +31,14 @@ function getStatusLabel(message: MessageItem): string {
 }
 
 export function ChatThread({ detail, loading }: Props) {
+  const messageListRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const container = messageListRef.current;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
+  }, [detail?.conversation.phone, detail?.messages.length]);
+
   if (loading) {
     return <section className="threadPanel emptyState">Loading conversation…</section>;
   }
@@ -51,14 +60,16 @@ export function ChatThread({ detail, loading }: Props) {
         </div>
       </div>
 
-      <div className="messageList">
+      <div ref={messageListRef} className="messageList">
         {detail.messages.length ? (
           detail.messages.map((message) => (
-            <div key={message.sid} className={`messageBubble ${message.direction}`}>
-              <div className="messageBody">{message.body || '(empty message)'}</div>
-              <div className="messageMeta">
-                <span>{message.direction === 'inbound' ? 'Lead' : 'You'} • {getStatusLabel(message)}</span>
-                <span>{new Date(message.dateCreated).toLocaleString()}</span>
+            <div key={message.sid} className={`messageRow ${message.direction}`}>
+              <div className={`messageBubble ${message.direction}`}>
+                <div className="messageBody">{message.body || '(empty message)'}</div>
+                <div className="messageMeta">
+                  <span>{message.direction === 'inbound' ? 'Lead' : 'You'} • {getStatusLabel(message)}</span>
+                  <span>{new Date(message.dateCreated).toLocaleString()}</span>
+                </div>
               </div>
             </div>
           ))
