@@ -200,6 +200,14 @@ button, textarea, select {
   align-items: center;
 }
 
+.conversationBadgeStack {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .conversationTopRow {
   margin-bottom: 4px;
 }
@@ -523,6 +531,69 @@ button, textarea, select {
   }
 
   .replyActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .messageBubble {
+    max-width: 92%;
+  }
+
+  .conversationMetaRow,
+  .threadHeader,
+  .mobileThreadBar,
+  .sidebarHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .threadHeaderStatus {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .backButton {
+    width: 100%;
+  }
+}
+stretch;
+  }
+
+  .messageBubble {
+    max-width: 92%;
+  }
+
+  .conversationMetaRow,
+  .threadHeader,
+  .mobileThreadBar,
+  .sidebarHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .threadHeaderStatus {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .backButton {
+    width: 100%;
+  }
+}
+
+    flex-direction: column;
+  }
+
+  .threadHeaderStatus {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .backButton {
+    width: 100%;
+  }
+}
+{
     flex-direction: column;
     align-items: stretch;
   }

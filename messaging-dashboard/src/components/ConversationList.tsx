@@ -16,6 +16,8 @@ type ConversationGroup = {
   conversations: ConversationSummary[];
 };
 
+type FilterMode = 'all' | 'needs-response' | 'recent';
+
 function getConversationGroup(conversation: ConversationSummary): string {
   const responseType = (conversation.responseType || '').trim().toLowerCase();
 
@@ -37,9 +39,43 @@ function sortGroupConversations(items: ConversationSummary[]): ConversationSumma
   });
 }
 
+function isRecentReply(conversation: ConversationSummary): boolean {
+  if (!conversation.needsResponse || !conversation.lastMessageAt || conversation.lastDirection !== 'inbound') return false;
+  const ageMs = Date.now() - new Date(conversation.lastMessageAt).getTime();
+  return ageMs <= 1000 * 60 * 60 * 24;
+}
+
 export function ConversationList({ conversations, selectedPhone, onSelect }: Props) {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [search, setSearch] = useState('');
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+
+  const filteredConversations = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return conversations.filter((conversation) => {
+      const haystack = [
+        conversation.businessName,
+        conversation.phone,
+        conversation.lastMessageBody,
+        conversation.replyText,
+        conversation.responseType,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      const matchesSearch = !query || haystack.includes(query);
+      if (!matchesSearch) return false;
+
+      if (filterMode === 'needs-response') return conversation.needsResponse;
+      if (filterMode === 'recent') return isRecentReply(conversation);
+      return true;
+    });
+  }, [conversations, filterMode, search]);
+
   const groups = useMemo<ConversationGroup[]>(() => {
-    const grouped = conversations.reduce<Record<string, ConversationSummary[]>>((acc, conversation) => {
+    const grouped = filteredConversations.reduce<Record<string, ConversationSummary[]>>((acc, conversation) => {
       const key = getConversationGroup(conversation);
       acc[key] = acc[key] || [];
       acc[key].push(conversation);
@@ -52,9 +88,7 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
       { key: 'not-interested', label: 'Not interested', conversations: sortGroupConversations(grouped['not-interested'] || []) },
       { key: 'unassigned', label: 'Uncategorized', conversations: sortGroupConversations(grouped.unassigned || []) },
     ].filter((group) => group.conversations.length > 0);
-  }, [conversations]);
-
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  }, [filteredConversations]);
 
   function toggleGroup(key: string) {
     setCollapsed((current) => ({ ...current, [key]: !current[key] }));
@@ -67,11 +101,26 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
           <h2>Inbox</h2>
           <span>Organized by lead status</span>
         </div>
-        <span>{conversations.length} leads</span>
+        <span>{filteredConversations.length} shown</span>
+      </div>
+
+      <div className="sidebarControls">
+        <input
+          className="searchInput"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search business, phone, or message"
+        />
+
+        <div className="filterChips">
+          <button className={`filterChip ${filterMode === 'all' ? 'active' : ''}`} onClick={() => setFilterMode('all')}>All</button>
+          <button className={`filterChip ${filterMode === 'needs-response' ? 'active' : ''}`} onClick={() => setFilterMode('needs-response')}>Needs response</button>
+          <button className={`filterChip ${filterMode === 'recent' ? 'active' : ''}`} onClick={() => setFilterMode('recent')}>Fresh replies</button>
+        </div>
       </div>
 
       <div className="conversationList groupedConversationList">
-        {groups.map((group) => {
+        {groups.length ? groups.map((group) => {
           const isCollapsed = Boolean(collapsed[group.key]);
           const needsResponseCount = group.conversations.filter((conversation) => conversation.needsResponse).length;
 
@@ -88,33 +137,36 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
                 </div>
               </button>
 
-              {!isCollapsed ? (
-                <div className="conversationGroupCards">
-                  {group.conversations.map((conversation) => {
-                    const isActive = selectedPhone === conversation.phone;
-                    return (
-                      <button
-                        key={conversation.phone}
-                        className={`conversationCard ${isActive ? 'active' : ''} ${conversation.needsResponse ? 'needsResponseCard' : ''}`}
-                        onClick={() => onSelect(conversation.phone)}
-                      >
-                        <div className="conversationTopRow">
-                          <strong>{conversation.businessName || formatPhoneDisplay(conversation.phone)}</strong>
-                          <span>{conversation.lastMessageAt ? new Date(conversation.lastMessageAt).toLocaleDateString() : ''}</span>
-                        </div>
-                        <div className="conversationMetaRow">
-                          <div className="conversationMeta">{formatPhoneDisplay(conversation.phone)}</div>
+              <div className={`conversationGroupCards ${isCollapsed ? 'collapsed' : ''}`}>
+                {group.conversations.map((conversation) => {
+                  const isActive = selectedPhone === conversation.phone;
+                  const recentReply = isRecentReply(conversation);
+
+                  return (
+                    <button
+                      key={conversation.phone}
+                      className={`conversationCard ${isActive ? 'active' : ''} ${conversation.needsResponse ? 'needsResponseCard' : ''} ${recentReply ? 'freshReplyCard' : ''}`}
+                      onClick={() => onSelect(conversation.phone)}
+                    >
+                      <div className="conversationTopRow">
+                        <strong>{conversation.businessName || formatPhoneDisplay(conversation.phone)}</strong>
+                        <span>{conversation.lastMessageAt ? new Date(conversation.lastMessageAt).toLocaleDateString() : ''}</span>
+                      </div>
+                      <div className="conversationMetaRow">
+                        <div className="conversationMeta">{formatPhoneDisplay(conversation.phone)}</div>
+                        <div className="conversationBadgeStack">
+                          {recentReply ? <span className="freshReplyBadge">Fresh reply</span> : null}
                           {conversation.needsResponse ? <span className="needsResponseBadge">Needs response</span> : null}
                         </div>
-                        <div className="conversationPreview">{conversation.lastMessageBody || conversation.replyText || 'No messages yet'}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
+                      </div>
+                      <div className="conversationPreview">{conversation.lastMessageBody || conversation.replyText || 'No messages yet'}</div>
+                    </button>
+                  );
+                })}
+              </div>
             </section>
           );
-        })}
+        }) : <div className="emptyState sidebarEmptyState">No conversations match your filters.</div>}
       </div>
     </aside>
   );
