@@ -13,7 +13,9 @@ export type LeadRow = {
   zoomBooked: string;
   showed: string;
   closed: string;
+  message3Sent: string;
   notes: string;
+  notesColumn: 'N' | 'O';
   handledAfterMsg2At?: string | null;
 };
 

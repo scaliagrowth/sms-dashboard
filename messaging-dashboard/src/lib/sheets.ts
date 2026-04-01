@@ -3,7 +3,6 @@ import { normalizePhone } from '@/lib/phone';
 import type { LeadRow } from '@/lib/types';
 
 const HANDLED_MARKER = 'handled_after_msg2';
-
 const SHEET_NAME = 'Sheet1';
 
 function getEnv(name: string): string {
@@ -49,8 +48,17 @@ function upsertHandledMarker(notes: string, isoTimestamp: string): string {
   return `${cleaned}${cleaned ? ' ' : ''}[${HANDLED_MARKER}: ${isoTimestamp}]`.trim();
 }
 
+function hasMessage3Column(values: string[]): boolean {
+  return values.length >= 15;
+}
+
+function getNotesColumnLetter(lead: LeadRow): string {
+  return lead.message3Sent ? 'O' : 'N';
+}
+
 function toLeadRow(values: string[], rowNumber: number): LeadRow {
-  const notes = values[13] ?? '';
+  const message3Enabled = hasMessage3Column(values);
+  const notes = message3Enabled ? values[14] ?? '' : values[13] ?? '';
 
   return {
     rowNumber,
@@ -67,7 +75,9 @@ function toLeadRow(values: string[], rowNumber: number): LeadRow {
     zoomBooked: values[10] ?? '',
     showed: values[11] ?? '',
     closed: values[12] ?? '',
+    message3Sent: message3Enabled ? values[13] ?? '' : '',
     notes,
+    notesColumn: message3Enabled ? 'O' : 'N',
     handledAfterMsg2At: extractHandledAfterMsg2At(notes),
   };
 }
@@ -77,7 +87,7 @@ export async function getLeads(): Promise<LeadRow[]> {
   const spreadsheetId = getEnv('GOOGLE_SHEET_ID');
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${SHEET_NAME}!A:N`,
+    range: `${SHEET_NAME}!A:O`,
   });
 
   const rows = response.data.values ?? [];
@@ -137,6 +147,7 @@ export async function updateLeadStatusFields(
   const spreadsheetId = getEnv('GOOGLE_SHEET_ID');
   const handledAt = new Date().toISOString();
   const notesWithMarker = upsertHandledMarker(lead.notes || '', handledAt);
+  const notesColumn = getNotesColumnLetter(lead);
 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId,
@@ -152,7 +163,7 @@ export async function updateLeadStatusFields(
           values: [[settingCallBooked]],
         },
         {
-          range: `${SHEET_NAME}!N${lead.rowNumber}`,
+          range: `${SHEET_NAME}!${notesColumn}${lead.rowNumber}`,
           values: [[notesWithMarker]],
         },
       ],
