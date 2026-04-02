@@ -73,7 +73,7 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
 
   const lead = detail.lead;
 
-  async function handleSave(overrides?: Partial<LeadUpdateInput>) {
+  async function handleSave(overrides?: Partial<LeadUpdateInput>, successMessage?: string) {
     if (!detail) return;
 
     const nextForm = { ...form, ...overrides };
@@ -100,7 +100,7 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
       }
 
       setForm(nextForm);
-      setSaveMessage(nextForm.markDnc ? 'Marked as DNC and archived.' : 'Saved');
+      setSaveMessage(successMessage || (nextForm.markDnc ? 'Marked as DNC and archived.' : 'Saved'));
       if (onUpdated) await onUpdated();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Failed to update lead details.');
@@ -146,6 +146,7 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
           <span>Response type</span>
           <select value={form.responseType} onChange={(event) => setForm((current) => ({ ...current, responseType: event.target.value, markDnc: false }))} disabled={form.markDnc}>
             <option value="">Blank</option>
+            <option value="Highly interested">Highly interested</option>
             <option value="Interested">Interested</option>
             <option value="More info">More info</option>
             <option value="Not interested">Not interested</option>
@@ -194,6 +195,7 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
 
         <div className="editorActions">
           <button onClick={() => handleSave({ markDnc: false })} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
+          <button className="successButton" onClick={() => handleSave({ markDnc: false, responseType: 'Highly interested' }, 'Marked as highly interested.')} disabled={saving}>Highly interested</button>
           <button className="dangerButton" onClick={() => handleSave({ markDnc: true, responseType: '', closed: '', nextFollowUpAt: '' })} disabled={saving}>Mark DNC</button>
           {saveMessage ? <span className="saveSuccess">{saveMessage}</span> : null}
           {saveError ? <span className="errorText">{saveError}</span> : null}

@@ -5,7 +5,7 @@ import type { LeadUpdateInput } from '@/lib/types';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const validResponseTypes = ['', 'Interested', 'More info', 'Not interested', 'DNC'];
+const validResponseTypes = ['', 'Highly interested', 'Interested', 'More info', 'Not interested', 'DNC'];
 
 export async function POST(request: Request) {
   try {

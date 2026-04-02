@@ -539,8 +539,18 @@ button, textarea, select, input {
   border-color: rgba(248, 113, 113, 0.3);
 }
 
+.statusPill.highlyInterested {
+  background: rgba(34, 197, 94, 0.14);
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
 .dangerButton {
   background: linear-gradient(90deg, #ef4444 0%, #f97316 100%) !important;
+}
+
+.successButton {
+  background: linear-gradient(90deg, #16a34a 0%, #22c55e 100%) !important;
 }
 
 .saveSuccess {

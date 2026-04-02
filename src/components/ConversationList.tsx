@@ -10,7 +10,7 @@ type Props = {
   onSelect: (phone: string) => void;
 };
 
-type FilterMode = 'work' | 'active' | 'follow-up' | 'closed' | 'dnc' | 'all';
+type FilterMode = 'work' | 'highly-interested' | 'active' | 'follow-up' | 'closed' | 'dnc' | 'all';
 
 function sortConversations(items: ConversationSummary[]): ConversationSummary[] {
   return [...items].sort((a, b) => {
@@ -29,6 +29,10 @@ function getStatusPillLabel(status: LeadWorkflowStatus) {
   if (status === 'closed') return 'Closed';
   if (status === 'dnc') return 'DNC';
   return 'Active';
+}
+
+function isHighlyInterested(responseType: string | null) {
+  return (responseType || '').trim().toLowerCase() === 'highly interested';
 }
 
 export function ConversationList({ conversations, selectedPhone, onSelect }: Props) {
@@ -58,6 +62,9 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
       if (filterMode === 'work') {
         return conversation.workflowStatus === 'active' || conversation.workflowStatus === 'follow-up';
       }
+      if (filterMode === 'highly-interested') {
+        return isHighlyInterested(conversation.responseType);
+      }
       return conversation.workflowStatus === filterMode;
     });
 
@@ -84,6 +91,7 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
 
         <div className="filterChips">
           <button type="button" className={`filterChip ${filterMode === 'work' ? 'active' : ''}`} onClick={() => setFilterMode('work')}>Work queue</button>
+          <button type="button" className={`filterChip ${filterMode === 'highly-interested' ? 'active' : ''}`} onClick={() => setFilterMode('highly-interested')}>Highly interested</button>
           <button type="button" className={`filterChip ${filterMode === 'active' ? 'active' : ''}`} onClick={() => setFilterMode('active')}>Active</button>
           <button type="button" className={`filterChip ${filterMode === 'follow-up' ? 'active' : ''}`} onClick={() => setFilterMode('follow-up')}>Follow up</button>
           <button type="button" className={`filterChip ${filterMode === 'closed' ? 'active' : ''}`} onClick={() => setFilterMode('closed')}>Closed</button>
@@ -110,6 +118,7 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
                 <div className="conversationMeta">{formatPhoneDisplay(conversation.phone)}</div>
                 <div className="conversationBadgeStack">
                   <span className={`statusPill ${conversation.workflowStatus}`}>{getStatusPillLabel(conversation.workflowStatus)}</span>
+                  {isHighlyInterested(conversation.responseType) ? <span className="statusPill highlyInterested">Hot lead</span> : null}
                   {conversation.needsResponse ? <span className="needsResponseBadge">Needs response</span> : null}
                 </div>
               </div>
