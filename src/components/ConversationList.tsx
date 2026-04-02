@@ -10,7 +10,7 @@ type Props = {
   onSelect: (phone: string) => void;
 };
 
-type FilterMode = 'active' | 'follow-up' | 'closed' | 'dnc' | 'all';
+type FilterMode = 'work' | 'active' | 'follow-up' | 'closed' | 'dnc' | 'all';
 
 function sortConversations(items: ConversationSummary[]): ConversationSummary[] {
   return [...items].sort((a, b) => {
@@ -33,7 +33,7 @@ function getStatusPillLabel(status: LeadWorkflowStatus) {
 
 export function ConversationList({ conversations, selectedPhone, onSelect }: Props) {
   const [search, setSearch] = useState('');
-  const [filterMode, setFilterMode] = useState<FilterMode>('active');
+  const [filterMode, setFilterMode] = useState<FilterMode>('work');
 
   const filteredConversations = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -55,6 +55,9 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
       if (!matchesSearch) return false;
 
       if (filterMode === 'all') return true;
+      if (filterMode === 'work') {
+        return conversation.workflowStatus === 'active' || conversation.workflowStatus === 'follow-up';
+      }
       return conversation.workflowStatus === filterMode;
     });
 
@@ -66,7 +69,7 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
       <div className="sidebarHeader">
         <div>
           <h2>Inbox</h2>
-          <span>Cleaner status buckets</span>
+          <span>Main view stays focused on leads that still matter</span>
         </div>
         <span>{filteredConversations.length} shown</span>
       </div>
@@ -80,6 +83,7 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
         />
 
         <div className="filterChips">
+          <button type="button" className={`filterChip ${filterMode === 'work' ? 'active' : ''}`} onClick={() => setFilterMode('work')}>Work queue</button>
           <button type="button" className={`filterChip ${filterMode === 'active' ? 'active' : ''}`} onClick={() => setFilterMode('active')}>Active</button>
           <button type="button" className={`filterChip ${filterMode === 'follow-up' ? 'active' : ''}`} onClick={() => setFilterMode('follow-up')}>Follow up</button>
           <button type="button" className={`filterChip ${filterMode === 'closed' ? 'active' : ''}`} onClick={() => setFilterMode('closed')}>Closed</button>
