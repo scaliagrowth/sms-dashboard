@@ -36,7 +36,7 @@ body {
   background-attachment: fixed;
 }
 
-button, textarea, select {
+button, textarea, select, input {
   font: inherit;
 }
 
@@ -136,6 +136,33 @@ button, textarea, select {
 
 .groupedConversationList {
   gap: 16px;
+}
+
+.sidebarControls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.filterChips {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.filterChip {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.filterChip.active {
+  background: var(--accent-soft);
+  border-color: rgba(126, 179, 255, 0.35);
 }
 
 .conversationList {
@@ -353,7 +380,10 @@ button, textarea, select {
 }
 
 .replyBox textarea,
-.editorField select {
+.editorField select,
+.editorField input,
+.editorField textarea,
+.searchInput {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -362,7 +392,8 @@ button, textarea, select {
   color: var(--text);
 }
 
-.replyBox textarea {
+.replyBox textarea,
+.editorField textarea {
   min-height: 110px;
   resize: vertical;
 }
@@ -454,6 +485,62 @@ button, textarea, select {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.panelSectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.sectionHint,
+.followUpText {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.editorGridTwo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.statusPill.active {
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+}
+
+.statusPill.follow-up {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.statusPill.closed {
+  background: rgba(148, 163, 184, 0.14);
+  color: #cbd5e1;
+}
+
+.statusPill.dnc {
+  background: rgba(248, 113, 113, 0.14);
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
+.dangerButton {
+  background: linear-gradient(90deg, #ef4444 0%, #f97316 100%) !important;
 }
 
 .saveSuccess {

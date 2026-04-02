@@ -124,12 +124,12 @@ export function InboxLayout() {
               </div>
             ) : null}
             <ChatThread detail={detail} loading={loadingDetail} />
-            <ReplyBox phone={selectedPhone} onSent={refreshSelectedConversation} />
-            {isMobile ? <LeadDetailsPanel detail={detail} /> : null}
+            <ReplyBox phone={selectedPhone} onSent={refreshSelectedConversation} disabled={detail?.conversation.workflowStatus === 'dnc'} />
+            {isMobile ? <LeadDetailsPanel detail={detail} onUpdated={refreshSelectedConversation} /> : null}
           </div>
         ) : null}
 
-        {!isMobile ? <LeadDetailsPanel detail={detail} /> : null}
+        {!isMobile ? <LeadDetailsPanel detail={detail} onUpdated={refreshSelectedConversation} /> : null}
       </div>
     </main>
   );

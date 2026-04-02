@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { formatPhoneDisplay } from '@/lib/phone';
-import type { ConversationSummary } from '@/lib/types';
+import type { ConversationSummary, LeadWorkflowStatus } from '@/lib/types';
 
 type Props = {
   conversations: ConversationSummary[];
@@ -10,11 +10,7 @@ type Props = {
   onSelect: (phone: string) => void;
 };
 
-type FilterMode = 'all' | 'interested' | 'not-interested' | 'more-info';
-
-function getNormalizedResponseType(value: string | null | undefined): string {
-  return (value || '').trim().toLowerCase();
-}
+type FilterMode = 'active' | 'follow-up' | 'closed' | 'dnc' | 'all';
 
 function sortConversations(items: ConversationSummary[]): ConversationSummary[] {
   return [...items].sort((a, b) => {
@@ -28,9 +24,16 @@ function sortConversations(items: ConversationSummary[]): ConversationSummary[] 
   });
 }
 
+function getStatusPillLabel(status: LeadWorkflowStatus) {
+  if (status === 'follow-up') return 'Follow up';
+  if (status === 'closed') return 'Closed';
+  if (status === 'dnc') return 'DNC';
+  return 'Active';
+}
+
 export function ConversationList({ conversations, selectedPhone, onSelect }: Props) {
   const [search, setSearch] = useState('');
-  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+  const [filterMode, setFilterMode] = useState<FilterMode>('active');
 
   const filteredConversations = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -42,6 +45,7 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
         conversation.lastMessageBody,
         conversation.replyText,
         conversation.responseType,
+        conversation.niche,
       ]
         .filter(Boolean)
         .join(' ')
@@ -50,12 +54,8 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
       const matchesSearch = !query || haystack.includes(query);
       if (!matchesSearch) return false;
 
-      const responseType = getNormalizedResponseType(conversation.responseType);
-
-      if (filterMode === 'interested') return responseType === 'interested';
-      if (filterMode === 'not-interested') return responseType === 'not interested';
-      if (filterMode === 'more-info') return responseType === 'more info';
-      return true;
+      if (filterMode === 'all') return true;
+      return conversation.workflowStatus === filterMode;
     });
 
     return sortConversations(matching);
@@ -66,7 +66,7 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
       <div className="sidebarHeader">
         <div>
           <h2>Inbox</h2>
-          <span>Filter by lead status</span>
+          <span>Cleaner status buckets</span>
         </div>
         <span>{filteredConversations.length} shown</span>
       </div>
@@ -76,14 +76,15 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
           className="searchInput"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search business, phone, or message"
+          placeholder="Search business, phone, note, or message"
         />
 
         <div className="filterChips">
+          <button type="button" className={`filterChip ${filterMode === 'active' ? 'active' : ''}`} onClick={() => setFilterMode('active')}>Active</button>
+          <button type="button" className={`filterChip ${filterMode === 'follow-up' ? 'active' : ''}`} onClick={() => setFilterMode('follow-up')}>Follow up</button>
+          <button type="button" className={`filterChip ${filterMode === 'closed' ? 'active' : ''}`} onClick={() => setFilterMode('closed')}>Closed</button>
+          <button type="button" className={`filterChip ${filterMode === 'dnc' ? 'active' : ''}`} onClick={() => setFilterMode('dnc')}>DNC</button>
           <button type="button" className={`filterChip ${filterMode === 'all' ? 'active' : ''}`} onClick={() => setFilterMode('all')}>All</button>
-          <button type="button" className={`filterChip ${filterMode === 'interested' ? 'active' : ''}`} onClick={() => setFilterMode('interested')}>Interested</button>
-          <button type="button" className={`filterChip ${filterMode === 'not-interested' ? 'active' : ''}`} onClick={() => setFilterMode('not-interested')}>Not interested</button>
-          <button type="button" className={`filterChip ${filterMode === 'more-info' ? 'active' : ''}`} onClick={() => setFilterMode('more-info')}>More info</button>
         </div>
       </div>
 
@@ -103,8 +104,12 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
               </div>
               <div className="conversationMetaRow">
                 <div className="conversationMeta">{formatPhoneDisplay(conversation.phone)}</div>
-                {conversation.needsResponse ? <span className="needsResponseBadge">Needs response</span> : null}
+                <div className="conversationBadgeStack">
+                  <span className={`statusPill ${conversation.workflowStatus}`}>{getStatusPillLabel(conversation.workflowStatus)}</span>
+                  {conversation.needsResponse ? <span className="needsResponseBadge">Needs response</span> : null}
+                </div>
               </div>
+              {conversation.nextFollowUpAt ? <div className="followUpText">Follow up: {new Date(conversation.nextFollowUpAt).toLocaleString()}</div> : null}
               <div className="conversationPreview">{conversation.lastMessageBody || conversation.replyText || 'No messages yet'}</div>
             </button>
           );

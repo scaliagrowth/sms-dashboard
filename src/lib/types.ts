@@ -17,6 +17,9 @@ export type LeadRow = {
   notes: string;
   notesColumn: 'N' | 'O';
   handledAfterMsg2At?: string | null;
+  archivedAt?: string | null;
+  nextFollowUpAt?: string | null;
+  dncAt?: string | null;
 };
 
 export type MessageItem = {
@@ -28,6 +31,8 @@ export type MessageItem = {
   from: string;
   to: string;
 };
+
+export type LeadWorkflowStatus = 'active' | 'follow-up' | 'closed' | 'dnc';
 
 export type ConversationSummary = {
   phone: string;
@@ -41,10 +46,27 @@ export type ConversationSummary = {
   lastMessageBody: string | null;
   lastDirection: 'inbound' | 'outbound' | null;
   needsResponse: boolean;
+  workflowStatus: LeadWorkflowStatus;
+  isArchived: boolean;
+  nextFollowUpAt: string | null;
 };
 
 export type ConversationDetail = {
   conversation: ConversationSummary;
   lead: LeadRow | null;
   messages: MessageItem[];
+};
+
+export type LeadUpdateInput = {
+  phone: string;
+  businessName: string;
+  niche: string;
+  responseType: string;
+  settingCallBooked: string;
+  zoomBooked: string;
+  showed: string;
+  closed: string;
+  notes: string;
+  nextFollowUpAt: string;
+  markDnc: boolean;
 };

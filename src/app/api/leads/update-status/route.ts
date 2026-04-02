@@ -1,33 +1,50 @@
 import { NextResponse } from 'next/server';
-import { updateLeadStatusFields } from '@/lib/sheets';
+import { updateLeadFields } from '@/lib/sheets';
+import type { LeadUpdateInput } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const validResponseTypes = ['', 'Interested', 'More info', 'Not interested', 'DNC'];
+const validBinaryValues = ['', 'Yes'];
+
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const phone = String(body.phone ?? '').trim();
-    const responseType = String(body.responseType ?? '').trim();
-    const settingCallBooked = String(body.settingCallBooked ?? '').trim();
+    const body = (await request.json()) as Partial<LeadUpdateInput>;
+    const payload: LeadUpdateInput = {
+      phone: String(body.phone ?? '').trim(),
+      businessName: String(body.businessName ?? '').trim(),
+      niche: String(body.niche ?? '').trim(),
+      responseType: String(body.responseType ?? '').trim(),
+      settingCallBooked: String(body.settingCallBooked ?? '').trim(),
+      zoomBooked: String(body.zoomBooked ?? '').trim(),
+      showed: String(body.showed ?? '').trim(),
+      closed: String(body.closed ?? '').trim(),
+      notes: String(body.notes ?? '').trim(),
+      nextFollowUpAt: String(body.nextFollowUpAt ?? '').trim(),
+      markDnc: Boolean(body.markDnc),
+    };
 
-    if (!phone) {
+    if (!payload.phone) {
       return NextResponse.json({ error: 'Phone is required.' }, { status: 400 });
     }
 
-    const validResponseTypes = ['', 'Interested', 'More info', 'Not interested'];
-    const validSettingCallValues = ['', 'Yes'];
-
-    if (!validResponseTypes.includes(responseType)) {
+    if (!validResponseTypes.includes(payload.responseType)) {
       return NextResponse.json({ error: 'Invalid response type.' }, { status: 400 });
     }
 
-    if (!validSettingCallValues.includes(settingCallBooked)) {
-      return NextResponse.json({ error: 'Invalid setting call value.' }, { status: 400 });
+    for (const [label, value] of [
+      ['setting call value', payload.settingCallBooked],
+      ['zoom booked value', payload.zoomBooked],
+      ['showed value', payload.showed],
+      ['closed value', payload.closed],
+    ] as const) {
+      if (!validBinaryValues.includes(value)) {
+        return NextResponse.json({ error: `Invalid ${label}.` }, { status: 400 });
+      }
     }
 
-    const updatedLead = await updateLeadStatusFields(phone, responseType, settingCallBooked);
-
+    const updatedLead = await updateLeadFields(payload);
     if (!updatedLead) {
       return NextResponse.json({ error: 'Lead not found.' }, { status: 404 });
     }
@@ -35,6 +52,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, updatedLead });
   } catch (error) {
     console.error('POST /api/leads/update-status failed', error);
-    return NextResponse.json({ error: 'Failed to update lead status.' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to update lead details.' }, { status: 500 });
   }
 }
