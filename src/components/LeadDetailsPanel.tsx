@@ -19,6 +19,11 @@ function toDatetimeLocalValue(value: string | null | undefined) {
   return local.toISOString().slice(0, 16);
 }
 
+function getSelectOptions(currentValue: string) {
+  const base = ['', 'Yes'];
+  return currentValue && !base.includes(currentValue) ? [currentValue, ...base] : base;
+}
+
 export function LeadDetailsPanel({ detail, onUpdated }: Props) {
   const [form, setForm] = useState<LeadUpdateInput>({
     phone: '',
@@ -68,8 +73,10 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
 
   const lead = detail.lead;
 
-  async function handleSave(markDnc = form.markDnc) {
+  async function handleSave(overrides?: Partial<LeadUpdateInput>) {
     if (!detail) return;
+
+    const nextForm = { ...form, ...overrides };
 
     try {
       setSaving(true);
@@ -81,10 +88,9 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({
-          ...form,
+          ...nextForm,
           phone: detail.conversation.phone,
-          markDnc,
-          nextFollowUpAt: form.nextFollowUpAt ? new Date(form.nextFollowUpAt).toISOString() : '',
+          nextFollowUpAt: nextForm.nextFollowUpAt ? new Date(nextForm.nextFollowUpAt).toISOString() : '',
         }),
       });
 
@@ -93,7 +99,8 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
         throw new Error(data.error || 'Failed to update lead details.');
       }
 
-      setSaveMessage(markDnc ? 'Marked as DNC and archived.' : 'Saved');
+      setForm(nextForm);
+      setSaveMessage(nextForm.markDnc ? 'Marked as DNC and archived.' : 'Saved');
       if (onUpdated) await onUpdated();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Failed to update lead details.');
@@ -101,6 +108,11 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
       setSaving(false);
     }
   }
+
+  const settingCallOptions = getSelectOptions(form.settingCallBooked);
+  const zoomOptions = getSelectOptions(form.zoomBooked);
+  const showedOptions = getSelectOptions(form.showed);
+  const closedOptions = getSelectOptions(form.closed);
 
   return (
     <aside className="detailsPanel">
@@ -144,32 +156,28 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
           <label className="editorField">
             <span>Setting call</span>
             <select value={form.settingCallBooked} onChange={(event) => setForm((current) => ({ ...current, settingCallBooked: event.target.value }))}>
-              <option value="">Blank</option>
-              <option value="Yes">Yes</option>
+              {settingCallOptions.map((value) => <option key={value || 'blank'} value={value}>{value || 'Blank'}</option>)}
             </select>
           </label>
 
           <label className="editorField">
             <span>Zoom booked</span>
             <select value={form.zoomBooked} onChange={(event) => setForm((current) => ({ ...current, zoomBooked: event.target.value }))}>
-              <option value="">Blank</option>
-              <option value="Yes">Yes</option>
+              {zoomOptions.map((value) => <option key={value || 'blank'} value={value}>{value || 'Blank'}</option>)}
             </select>
           </label>
 
           <label className="editorField">
             <span>Showed</span>
             <select value={form.showed} onChange={(event) => setForm((current) => ({ ...current, showed: event.target.value }))}>
-              <option value="">Blank</option>
-              <option value="Yes">Yes</option>
+              {showedOptions.map((value) => <option key={value || 'blank'} value={value}>{value || 'Blank'}</option>)}
             </select>
           </label>
 
           <label className="editorField">
             <span>Closed</span>
             <select value={form.closed} onChange={(event) => setForm((current) => ({ ...current, closed: event.target.value, markDnc: false }))} disabled={form.markDnc}>
-              <option value="">Blank</option>
-              <option value="Yes">Yes</option>
+              {closedOptions.map((value) => <option key={value || 'blank'} value={value}>{value || 'Blank'}</option>)}
             </select>
           </label>
         </div>
@@ -185,11 +193,8 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
         </label>
 
         <div className="editorActions">
-          <button onClick={() => handleSave(false)} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
-          <button className="dangerButton" onClick={() => {
-            setForm((current) => ({ ...current, markDnc: true, responseType: '', closed: '', nextFollowUpAt: '' }));
-            void handleSave(true);
-          }} disabled={saving}>Mark DNC</button>
+          <button onClick={() => handleSave({ markDnc: false })} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
+          <button className="dangerButton" onClick={() => handleSave({ markDnc: true, responseType: '', closed: '', nextFollowUpAt: '' })} disabled={saving}>Mark DNC</button>
           {saveMessage ? <span className="saveSuccess">{saveMessage}</span> : null}
           {saveError ? <span className="errorText">{saveError}</span> : null}
         </div>

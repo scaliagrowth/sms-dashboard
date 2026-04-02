@@ -6,7 +6,6 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const validResponseTypes = ['', 'Interested', 'More info', 'Not interested', 'DNC'];
-const validBinaryValues = ['', 'Yes'];
 
 export async function POST(request: Request) {
   try {
@@ -29,19 +28,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Phone is required.' }, { status: 400 });
     }
 
-    if (!validResponseTypes.includes(payload.responseType)) {
+    if (!payload.markDnc && !validResponseTypes.includes(payload.responseType)) {
       return NextResponse.json({ error: 'Invalid response type.' }, { status: 400 });
-    }
-
-    for (const [label, value] of [
-      ['setting call value', payload.settingCallBooked],
-      ['zoom booked value', payload.zoomBooked],
-      ['showed value', payload.showed],
-      ['closed value', payload.closed],
-    ] as const) {
-      if (!validBinaryValues.includes(value)) {
-        return NextResponse.json({ error: `Invalid ${label}.` }, { status: 400 });
-      }
     }
 
     const updatedLead = await updateLeadFields(payload);
