@@ -1,8 +1,12 @@
 import { google } from 'googleapis';
 import { normalizePhone } from '@/lib/phone';
-import type { LeadRow } from '@/lib/types';
+import type { LeadRow, LeadUpdateInput } from '@/lib/types';
 
 const HANDLED_MARKER = 'handled_after_msg2';
+const ARCHIVED_MARKER = 'archived';
+const FOLLOW_UP_MARKER = 'next_follow_up';
+const DNC_MARKER = 'dnc';
+const DASHBOARD_METADATA_HEADER = 'Dashboard Metadata';
 const SHEET_NAME = 'Sheet1';
 
 function getEnv(name: string): string {
@@ -16,15 +20,11 @@ function getEnv(name: string): string {
 function normalizePrivateKey(rawKey: string): string {
   let normalized = rawKey.trim();
 
-  if (
-    (normalized.startsWith('"') && normalized.endsWith('"')) ||
-    (normalized.startsWith("'") && normalized.endsWith("'"))
-  ) {
+  if ((normalized.startsWith('"') && normalized.endsWith('"')) || (normalized.startsWith("'") && normalized.endsWith("'"))) {
     normalized = normalized.slice(1, -1);
   }
 
   normalized = normalized.replace(/\\n/g, '\n');
-
   return normalized;
 }
 
@@ -38,27 +38,62 @@ function getSheetsClient() {
   return google.sheets({ version: 'v4', auth });
 }
 
-function extractHandledAfterMsg2At(notes: string): string | null {
-  const match = notes.match(/\[handled_after_msg2:\s*([^\]]+)\]/i);
+function extractMarker(notes: string, marker: string): string | null {
+  const regex = new RegExp(`\\[${marker}:\\s*([^\\]]+)\\]`, 'i');
+  const match = notes.match(regex);
   return match?.[1]?.trim() ?? null;
 }
 
-function upsertHandledMarker(notes: string, isoTimestamp: string): string {
-  const cleaned = notes.replace(/\s*\[handled_after_msg2:\s*[^\]]+\]/gi, '').trim();
-  return `${cleaned}${cleaned ? ' ' : ''}[${HANDLED_MARKER}: ${isoTimestamp}]`.trim();
+function removeMarker(notes: string, marker: string): string {
+  return notes.replace(new RegExp(`\\s*\\[${marker}:\\s*[^\\]]+\\]`, 'gi'), '').trim();
+}
+
+function setMarker(notes: string, marker: string, value: string | null): string {
+  const cleaned = removeMarker(notes, marker);
+  if (!value) return cleaned;
+  return `${cleaned}${cleaned ? ' ' : ''}[${marker}: ${value}]`.trim();
 }
 
 function hasMessage3Column(values: string[]): boolean {
   return values.length >= 15;
 }
 
-function getNotesColumnLetter(lead: LeadRow): string {
-  return lead.message3Sent ? 'O' : 'N';
+function columnNumberToLetter(columnNumber: number): string {
+  let value = columnNumber;
+  let column = '';
+
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    column = String.fromCharCode(65 + remainder) + column;
+    value = Math.floor((value - 1) / 26);
+  }
+
+  return column;
 }
 
-function toLeadRow(values: string[], rowNumber: number): LeadRow {
+function findColumnLetter(headers: string[], headerName: string): string | null {
+  const index = headers.findIndex((header) => header.trim().toLowerCase() === headerName.trim().toLowerCase());
+  return index >= 0 ? columnNumberToLetter(index + 1) : null;
+}
+
+function getNotesColumnLetter(lead: LeadRow): string {
+  return lead.notesColumn;
+}
+
+function getMetadataColumnLetter(headers: string[]): string {
+  const column = findColumnLetter(headers, DASHBOARD_METADATA_HEADER);
+  if (!column) {
+    throw new Error(`Missing required sheet column: ${DASHBOARD_METADATA_HEADER}`);
+  }
+  return column;
+}
+
+function toLeadRow(values: string[], rowNumber: number, headers: string[]): LeadRow {
   const message3Enabled = hasMessage3Column(values);
   const notes = message3Enabled ? values[14] ?? '' : values[13] ?? '';
+  const metadataColumn = findColumnLetter(headers, DASHBOARD_METADATA_HEADER);
+  const metadataIndex = metadataColumn ? headers.findIndex((header) => header.trim().toLowerCase() === DASHBOARD_METADATA_HEADER.toLowerCase()) : -1;
+  const metadata = metadataIndex >= 0 ? values[metadataIndex] ?? '' : notes;
 
   return {
     rowNumber,
@@ -78,7 +113,10 @@ function toLeadRow(values: string[], rowNumber: number): LeadRow {
     message3Sent: message3Enabled ? values[13] ?? '' : '',
     notes,
     notesColumn: message3Enabled ? 'O' : 'N',
-    handledAfterMsg2At: extractHandledAfterMsg2At(notes),
+    handledAfterMsg2At: extractMarker(metadata, HANDLED_MARKER),
+    archivedAt: extractMarker(metadata, ARCHIVED_MARKER),
+    nextFollowUpAt: extractMarker(metadata, FOLLOW_UP_MARKER),
+    dncAt: extractMarker(metadata, DNC_MARKER),
   };
 }
 
@@ -87,15 +125,14 @@ export async function getLeads(): Promise<LeadRow[]> {
   const spreadsheetId = getEnv('GOOGLE_SHEET_ID');
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${SHEET_NAME}!A:O`,
+    range: `${SHEET_NAME}!A:ZZ`,
   });
 
   const rows = response.data.values ?? [];
+  const headers = rows[0] ?? [];
   const dataRows = rows.slice(1);
 
-  return dataRows
-    .map((row, index) => toLeadRow(row, index + 2))
-    .filter((lead) => lead.phone);
+  return dataRows.map((row, index) => toLeadRow(row, index + 2, headers)).filter((lead) => lead.phone);
 }
 
 export async function findLeadByPhone(phone: string): Promise<LeadRow | null> {
@@ -116,14 +153,8 @@ export async function updateLeadReply(phone: string, replyText: string): Promise
     requestBody: {
       valueInputOption: 'USER_ENTERED',
       data: [
-        {
-          range: `${SHEET_NAME}!F${lead.rowNumber}`,
-          values: [['Yes']],
-        },
-        {
-          range: `${SHEET_NAME}!H${lead.rowNumber}`,
-          values: [[replyText]],
-        },
+        { range: `${SHEET_NAME}!F${lead.rowNumber}`, values: [['Yes']] },
+        { range: `${SHEET_NAME}!H${lead.rowNumber}`, values: [[replyText]] },
       ],
     },
   });
@@ -135,46 +166,61 @@ export async function updateLeadReply(phone: string, replyText: string): Promise
   };
 }
 
-export async function updateLeadStatusFields(
-  phone: string,
-  responseType: string,
-  settingCallBooked: string,
-): Promise<LeadRow | null> {
-  const lead = await findLeadByPhone(phone);
+export async function updateLeadFields(input: LeadUpdateInput): Promise<LeadRow | null> {
+  const lead = await findLeadByPhone(input.phone);
   if (!lead) return null;
 
+  const normalizedResponseType = input.markDnc ? 'DNC' : input.responseType;
+  const normalizedClosed = input.markDnc ? '' : input.closed;
+  const handledAt = new Date().toISOString();
+  const notesColumn = getNotesColumnLetter(lead);
   const sheets = getSheetsClient();
   const spreadsheetId = getEnv('GOOGLE_SHEET_ID');
-  const handledAt = new Date().toISOString();
-  const notesWithMarker = upsertHandledMarker(lead.notes || '', handledAt);
-  const notesColumn = getNotesColumnLetter(lead);
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${SHEET_NAME}!1:1`,
+  });
+  const headers = response.data.values?.[0] ?? [];
+  const metadataColumn = getMetadataColumnLetter(headers);
+
+  const notes = (input.notes || '').trim();
+  let metadata = '';
+  metadata = setMarker(metadata, HANDLED_MARKER, handledAt);
+  metadata = setMarker(metadata, FOLLOW_UP_MARKER, input.markDnc ? null : input.nextFollowUpAt || null);
+  metadata = setMarker(metadata, ARCHIVED_MARKER, input.markDnc ? handledAt : null);
+  metadata = setMarker(metadata, DNC_MARKER, input.markDnc ? handledAt : null);
 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId,
     requestBody: {
       valueInputOption: 'USER_ENTERED',
       data: [
-        {
-          range: `${SHEET_NAME}!G${lead.rowNumber}`,
-          values: [[responseType]],
-        },
-        {
-          range: `${SHEET_NAME}!J${lead.rowNumber}`,
-          values: [[settingCallBooked]],
-        },
-        {
-          range: `${SHEET_NAME}!${notesColumn}${lead.rowNumber}`,
-          values: [[notesWithMarker]],
-        },
+        { range: `${SHEET_NAME}!B${lead.rowNumber}`, values: [[input.businessName]] },
+        { range: `${SHEET_NAME}!D${lead.rowNumber}`, values: [[input.niche]] },
+        { range: `${SHEET_NAME}!G${lead.rowNumber}`, values: [[normalizedResponseType]] },
+        { range: `${SHEET_NAME}!J${lead.rowNumber}`, values: [[input.settingCallBooked]] },
+        { range: `${SHEET_NAME}!K${lead.rowNumber}`, values: [[input.zoomBooked]] },
+        { range: `${SHEET_NAME}!L${lead.rowNumber}`, values: [[input.showed]] },
+        { range: `${SHEET_NAME}!M${lead.rowNumber}`, values: [[normalizedClosed]] },
+        { range: `${SHEET_NAME}!${notesColumn}${lead.rowNumber}`, values: [[notes]] },
+        { range: `${SHEET_NAME}!${metadataColumn}${lead.rowNumber}`, values: [[metadata]] },
       ],
     },
   });
 
   return {
     ...lead,
-    responseType,
-    settingCallBooked,
-    notes: notesWithMarker,
+    businessName: input.businessName,
+    niche: input.niche,
+    responseType: normalizedResponseType,
+    settingCallBooked: input.settingCallBooked,
+    zoomBooked: input.zoomBooked,
+    showed: input.showed,
+    closed: normalizedClosed,
+    notes,
     handledAfterMsg2At: handledAt,
+    nextFollowUpAt: input.markDnc ? null : input.nextFollowUpAt || null,
+    archivedAt: input.markDnc ? handledAt : null,
+    dncAt: input.markDnc ? handledAt : null,
   };
 }
