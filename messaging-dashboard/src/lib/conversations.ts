@@ -1,7 +1,7 @@
 import { normalizePhone } from '@/lib/phone';
 import { findLeadByPhone, getLeads } from '@/lib/sheets';
 import { listMessagesForNumber, listRecentMessages } from '@/lib/twilio';
-import type { ConversationDetail, ConversationSummary, LeadRow, MessageItem } from '@/lib/types';
+import type { ConversationDetail, ConversationSummary, LeadRow, LeadWorkflowStatus, MessageItem } from '@/lib/types';
 
 function getConversationPhone(message: { from: string; to: string }, twilioNumber: string) {
   const from = normalizePhone(message.from);
@@ -11,6 +11,8 @@ function getConversationPhone(message: { from: string; to: string }, twilioNumbe
 
 function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolean {
   if (!messages.length) return false;
+  if ((lead?.responseType || '').trim().toUpperCase() === 'DNC') return false;
+  if ((lead?.closed || '').trim().toLowerCase() === 'yes') return false;
 
   const lastInboundIndex = [...messages].reverse().findIndex((message) => message.direction === 'inbound');
   if (lastInboundIndex === -1) return false;
@@ -33,6 +35,35 @@ function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolea
   if (handledAt && handledAt >= inboundAt) return false;
 
   return true;
+}
+
+function getWorkflowStatus(lead: LeadRow | null): LeadWorkflowStatus {
+  if ((lead?.responseType || '').trim().toUpperCase() === 'DNC') return 'dnc';
+  if ((lead?.closed || '').trim().toLowerCase() === 'yes') return 'closed';
+  if (lead?.nextFollowUpAt) return 'follow-up';
+  return 'active';
+}
+
+function toConversationSummary(phone: string, messages: MessageItem[], lead: LeadRow | null): ConversationSummary {
+  const sortedMessages = [...messages].sort((a, b) => new Date(a.dateCreated).getTime() - new Date(b.dateCreated).getTime());
+  const latestMessage = sortedMessages[sortedMessages.length - 1] ?? null;
+
+  return {
+    phone,
+    normalizedPhone: phone,
+    businessName: lead?.businessName ?? null,
+    niche: lead?.niche ?? null,
+    replied: lead?.replied ?? null,
+    responseType: lead?.responseType ?? null,
+    replyText: lead?.replyText ?? null,
+    lastMessageAt: latestMessage?.dateCreated ?? null,
+    lastMessageBody: latestMessage?.body ?? null,
+    lastDirection: latestMessage?.direction ?? null,
+    needsResponse: getNeedsResponse(sortedMessages, lead),
+    workflowStatus: getWorkflowStatus(lead),
+    isArchived: Boolean(lead?.archivedAt),
+    nextFollowUpAt: lead?.nextFollowUpAt ?? null,
+  };
 }
 
 export async function getConversationSummaries(): Promise<ConversationSummary[]> {
@@ -58,50 +89,19 @@ export async function getConversationSummaries(): Promise<ConversationSummary[]>
   const conversationMap = new Map<string, ConversationSummary>();
 
   for (const [phone, messages] of groupedMessages.entries()) {
-    const sortedMessages = [...messages].sort(
-      (a, b) => new Date(a.dateCreated).getTime() - new Date(b.dateCreated).getTime(),
-    );
-    const latestMessage = sortedMessages[sortedMessages.length - 1] ?? null;
     const lead = leadMap.get(phone) ?? null;
-
-    conversationMap.set(phone, {
-      phone,
-      normalizedPhone: phone,
-      businessName: lead?.businessName ?? null,
-      niche: lead?.niche ?? null,
-      replied: lead?.replied ?? null,
-      responseType: lead?.responseType ?? null,
-      replyText: lead?.replyText ?? null,
-      lastMessageAt: latestMessage?.dateCreated ?? null,
-      lastMessageBody: latestMessage?.body ?? null,
-      lastDirection: latestMessage?.direction ?? null,
-      needsResponse: getNeedsResponse(sortedMessages, lead),
-    });
+    conversationMap.set(phone, toConversationSummary(phone, messages, lead));
   }
 
   for (const lead of leads) {
     if (lead.normalizedPhone && !conversationMap.has(lead.normalizedPhone)) {
-      conversationMap.set(lead.normalizedPhone, {
-        phone: lead.normalizedPhone,
-        normalizedPhone: lead.normalizedPhone,
-        businessName: lead.businessName || null,
-        niche: lead.niche || null,
-        replied: lead.replied || null,
-        responseType: lead.responseType || null,
-        replyText: lead.replyText || null,
-        lastMessageAt: null,
-        lastMessageBody: null,
-        lastDirection: null,
-        needsResponse: false,
-      });
+      conversationMap.set(lead.normalizedPhone, toConversationSummary(lead.normalizedPhone, [], lead));
     }
   }
 
   return Array.from(conversationMap.values()).sort((a, b) => {
-    if (a.needsResponse !== b.needsResponse) {
-      return a.needsResponse ? -1 : 1;
-    }
-
+    if (a.isArchived !== b.isArchived) return a.isArchived ? 1 : -1;
+    if (a.needsResponse !== b.needsResponse) return a.needsResponse ? -1 : 1;
     const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
     const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
     return bTime - aTime;
@@ -113,19 +113,7 @@ export async function getConversationDetail(phone: string): Promise<Conversation
   const normalizedPhone = normalizePhone(phone);
 
   return {
-    conversation: {
-      phone: normalizedPhone,
-      normalizedPhone,
-      businessName: lead?.businessName ?? null,
-      niche: lead?.niche ?? null,
-      replied: lead?.replied ?? null,
-      responseType: lead?.responseType ?? null,
-      replyText: lead?.replyText ?? null,
-      lastMessageAt: messages[messages.length - 1]?.dateCreated ?? null,
-      lastMessageBody: messages[messages.length - 1]?.body ?? null,
-      lastDirection: messages[messages.length - 1]?.direction ?? null,
-      needsResponse: getNeedsResponse(messages, lead),
-    },
+    conversation: toConversationSummary(normalizedPhone, messages, lead),
     lead,
     messages,
   };
