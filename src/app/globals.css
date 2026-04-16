@@ -219,6 +219,24 @@ button, textarea, select, input {
   box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.22);
 }
 
+.clearResponseButton {
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 6px;
+  color: #3b82f6;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  align-self: flex-start;
+}
+
+.clearResponseButton:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
 .conversationTopRow,
 .conversationMetaRow {
   display: flex;
@@ -659,5 +677,22 @@ button, textarea, select, input {
 
   .backButton {
     width: 100%;
+  }
+
+  .clearResponseButton {
+    margin-top: 8px;
+    padding: 4px 8px;
+    background: rgba(59, 130, 246, 0.2);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    border-radius: 4px;
+    color: #3b82f6;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .clearResponseButton:hover {
+    background: rgba(59, 130, 246, 0.3);
+    border-color: rgba(59, 130, 246, 0.6);
   }
 }

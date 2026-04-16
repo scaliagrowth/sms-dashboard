@@ -96,6 +96,18 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
         }),
       });
 
+      // Parse the response to get updated data
+      const result = await response.json();
+      
+      // Update local form state with the new values from the server
+      if (result.success && result.updatedLead) {
+        const updatedLead = result.updatedLead;
+        setForm({
+          ...nextForm,
+          responseType: updatedLead.responseType,
+        });
+      }
+
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to update lead details.');
@@ -103,7 +115,10 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
 
       setForm(nextForm);
       setSaveMessage(successMessage || (nextForm.markDnc ? 'Marked as DNC and archived.' : 'Saved'));
-      if (onUpdated) await onUpdated();
+      if (onUpdated) {
+        // Only refresh the specific conversation, not the entire list
+        await onUpdated();
+      }
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Failed to update lead details.');
     } finally {
@@ -199,7 +214,7 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
           <button onClick={() => handleSave({ markDnc: false })} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
           <button className="successButton" onClick={() => handleSave({ markDnc: false, responseType: 'Highly interested' }, 'Marked as highly interested.')} disabled={saving}>Highly interested</button>
           {detail?.conversation.workflowStatus === 'dnc' ? (
-            <button className="warningButton" onClick={() => handleSave({ removeDnc: true, responseType: '', closed: '', nextFollowUpAt: '' }, 'Removed from DNC - can now text manually.')} disabled={saving}>Remove from DNC</button>
+            <button className="warningButton" onClick={() => handleSave({ removeDnc: true, responseType: 'Not interested', closed: '', nextFollowUpAt: '' }, 'Removed from DNC - can now text manually.')} disabled={saving}>Remove from DNC</button>
           ) : (
             <button className="dangerButton" onClick={() => handleSave({ markDnc: true, responseType: '', closed: '', nextFollowUpAt: '' })} disabled={saving}>Mark DNC</button>
           )}

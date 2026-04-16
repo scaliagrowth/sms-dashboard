@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { ConversationList } from './ConversationList';
 import { ChatThread } from './ChatThread';
 import { LeadDetailsPanel } from './LeadDetailsPanel';
@@ -16,10 +16,17 @@ export function InboxLayout() {
   const [error, setError] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<'list' | 'thread'>('list');
   const [isMobile, setIsMobile] = useState(false);
+  const scrollPositionRef = useRef(0);
+  const listContainerRef = useRef<HTMLDivElement>(null);
 
   async function loadConversations() {
     try {
       setLoadingList(true);
+      // Save scroll position before reloading
+      if (listContainerRef.current) {
+        scrollPositionRef.current = listContainerRef.current.scrollTop;
+      }
+      
       const response = await fetch('/api/conversations', { cache: 'no-store' });
       if (!response.ok) throw new Error('Failed to load conversations.');
       const data = await response.json();
@@ -76,10 +83,16 @@ export function InboxLayout() {
     return () => clearInterval(interval);
   }, [selectedPhone]);
 
-  async function refreshSelectedConversation() {
-    await loadConversations();
-    if (selectedPhone) {
-      await loadConversation(selectedPhone);
+  async function refreshSelectedConversation(phone?: string) {
+    // If a specific phone is provided, only refresh that conversation
+    if (phone) {
+      await loadConversation(phone);
+    } else {
+      // Otherwise, refresh everything
+      await loadConversations();
+      if (selectedPhone) {
+        await loadConversation(selectedPhone);
+      }
     }
   }
 
@@ -92,6 +105,15 @@ export function InboxLayout() {
 
   const showList = !isMobile || mobileView === 'list';
   const showThread = !isMobile || mobileView === 'thread';
+
+  // Restore scroll position after list updates
+  useEffect(() => {
+    if (listContainerRef.current && conversations.length > 0) {
+      requestAnimationFrame(() => {
+        listContainerRef.current!.scrollTop = scrollPositionRef.current;
+      });
+    }
+  }, [conversations]);
 
   return (
     <main className="appShell">
@@ -109,7 +131,9 @@ export function InboxLayout() {
           loadingList ? (
             <aside className="sidebar emptyState">Loading inbox…</aside>
           ) : (
-            <ConversationList conversations={conversations} selectedPhone={selectedPhone} onSelect={handleSelectConversation} />
+            <div ref={listContainerRef} className="conversationListContainer">
+              <ConversationList conversations={conversations} selectedPhone={selectedPhone} onSelect={handleSelectConversation} />
+            </div>
           )
         ) : null}
 

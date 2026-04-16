@@ -8,6 +8,7 @@ const HANDLED_MARKER = 'handled_after_msg2';
 const ARCHIVED_MARKER = 'archived';
 const FOLLOW_UP_MARKER = 'next_follow_up';
 const DNC_MARKER = 'dnc';
+const DASHBOARD_METADATA_HEADER = 'Dashboard Metadata';
 
 function readEnvFile(filePath) {
   const content = fs.readFileSync(filePath, 'utf8');
@@ -50,6 +51,24 @@ function setMarker(notes, marker, value) {
   return `${cleaned}${cleaned ? ' ' : ''}[${marker}: ${value}]`.trim();
 }
 
+function columnNumberToLetter(columnNumber) {
+  let value = columnNumber;
+  let column = '';
+
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    column = String.fromCharCode(65 + remainder) + column;
+    value = Math.floor((value - 1) / 26);
+  }
+
+  return column;
+}
+
+function findColumnLetter(headers, headerName) {
+  const index = headers.findIndex((header) => String(header || '').trim().toLowerCase() === headerName.trim().toLowerCase());
+  return index >= 0 ? columnNumberToLetter(index + 1) : null;
+}
+
 async function main() {
   const root = path.resolve(__dirname, '..');
   const envPath = path.join(root, '.env.local');
@@ -65,10 +84,16 @@ async function main() {
   const spreadsheetId = requireEnv(env, 'GOOGLE_SHEET_ID');
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${SHEET_NAME}!A:O`,
+    range: `${SHEET_NAME}!A:ZZ`,
   });
 
   const rows = response.data.values || [];
+  const headers = rows[0] || [];
+  const metadataColumn = findColumnLetter(headers, DASHBOARD_METADATA_HEADER);
+  if (!metadataColumn) {
+    throw new Error(`Missing required sheet column: ${DASHBOARD_METADATA_HEADER}`);
+  }
+
   const updates = [];
 
   for (let i = 1; i < rows.length; i += 1) {
@@ -77,25 +102,23 @@ async function main() {
     const responseType = (row[6] || '').trim().toUpperCase();
     if (responseType !== 'DNC') continue;
 
-    const hasMessage3Column = row.length >= 15;
-    const notesIndex = hasMessage3Column ? 14 : 13;
-    const notesColumn = hasMessage3Column ? 'O' : 'N';
-    const existingNotes = row[notesIndex] || '';
-    const stamp = extractMarker(existingNotes, DNC_MARKER)
-      || extractMarker(existingNotes, ARCHIVED_MARKER)
-      || extractMarker(existingNotes, HANDLED_MARKER)
+    const metadataIndex = headers.findIndex((header) => String(header || '').trim().toLowerCase() === DASHBOARD_METADATA_HEADER.toLowerCase());
+    const existingMetadata = metadataIndex >= 0 ? row[metadataIndex] || '' : '';
+    const stamp = extractMarker(existingMetadata, DNC_MARKER)
+      || extractMarker(existingMetadata, ARCHIVED_MARKER)
+      || extractMarker(existingMetadata, HANDLED_MARKER)
       || new Date().toISOString();
 
-    let nextNotes = existingNotes;
-    nextNotes = setMarker(nextNotes, HANDLED_MARKER, stamp);
-    nextNotes = setMarker(nextNotes, ARCHIVED_MARKER, stamp);
-    nextNotes = setMarker(nextNotes, DNC_MARKER, stamp);
-    nextNotes = setMarker(nextNotes, FOLLOW_UP_MARKER, null);
+    let nextMetadata = existingMetadata;
+    nextMetadata = setMarker(nextMetadata, HANDLED_MARKER, stamp);
+    nextMetadata = setMarker(nextMetadata, ARCHIVED_MARKER, stamp);
+    nextMetadata = setMarker(nextMetadata, DNC_MARKER, stamp);
+    nextMetadata = setMarker(nextMetadata, FOLLOW_UP_MARKER, null);
 
-    if (nextNotes !== existingNotes) {
+    if (nextMetadata !== existingMetadata) {
       updates.push({
-        range: `${SHEET_NAME}!${notesColumn}${rowNumber}`,
-        values: [[nextNotes]],
+        range: `${SHEET_NAME}!${metadataColumn}${rowNumber}`,
+        values: [[nextMetadata]],
       });
     }
   }

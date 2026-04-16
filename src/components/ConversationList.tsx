@@ -14,6 +14,12 @@ type FilterMode = 'work' | 'highly-interested' | 'active' | 'follow-up' | 'close
 
 function sortConversations(items: ConversationSummary[]): ConversationSummary[] {
   return [...items].sort((a, b) => {
+    // Manual follow-ups with "needs response" should be at the top
+    const aIsManualFollowUp = a.nextFollowUpAt && !a.lastMessageAt;
+    const bIsManualFollowUp = b.nextFollowUpAt && !b.lastMessageAt;
+    
+    if (aIsManualFollowUp && !bIsManualFollowUp) return -1;
+    if (!aIsManualFollowUp && bIsManualFollowUp) return 1;
     if (a.needsResponse !== b.needsResponse) {
       return a.needsResponse ? -1 : 1;
     }
@@ -38,6 +44,38 @@ function isHighlyInterested(responseType: string | null) {
 export function ConversationList({ conversations, selectedPhone, onSelect }: Props) {
   const [search, setSearch] = useState('');
   const [filterMode, setFilterMode] = useState<FilterMode>('work');
+
+  const clearNeedsResponse = async (phone: string) => {
+    try {
+      const response = await fetch('/api/leads/update-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          phone,
+          markDnc: false,
+          removeDnc: false,
+          // Keep all other fields as they are
+          responseType: '',
+          businessName: '',
+          niche: '',
+          settingCallBooked: '',
+          zoomBooked: '',
+          showed: '',
+          closed: '',
+          notes: '',
+          nextFollowUpAt: '',
+        }),
+      });
+      
+      if (response.ok) {
+        // Refresh the list to update the UI
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error('Failed to clear needs response:', error);
+    }
+  };
 
   const filteredConversations = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -122,6 +160,17 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
                   {conversation.needsResponse ? <span className="needsResponseBadge">Needs response</span> : null}
                 </div>
               </div>
+              {conversation.needsResponse && (
+                <button 
+                  className="clearResponseButton" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clearNeedsResponse(conversation.phone);
+                  }}
+                >
+                  Clear response
+                </button>
+              )}
               {conversation.nextFollowUpAt ? <div className="followUpText">Follow up: {new Date(conversation.nextFollowUpAt).toLocaleString()}</div> : null}
               <div className="conversationPreview">{conversation.lastMessageBody || conversation.replyText || 'No messages yet'}</div>
             </button>

@@ -31,6 +31,7 @@ export async function POST(request: Request) {
 
     // Handle DNC removal - this bypasses response type validation to allow DNC removal
     if (payload.removeDnc) {
+      // When removing from DNC, we can set any valid response type or keep empty
       if (!validResponseTypes.includes(payload.responseType) && payload.responseType !== '') {
         return NextResponse.json({ error: 'Invalid response type when removing from DNC.' }, { status: 400 });
       }

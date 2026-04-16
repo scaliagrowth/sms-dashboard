@@ -257,7 +257,7 @@ export async function updateLeadFields(input: LeadUpdateInput): Promise<LeadRow 
     } as any, sheets, spreadsheetId, headers, notesColumn, metadataColumn);
   } else if (input.removeDnc) {
     // Remove from DNC (manual override)
-    const normalizedResponseType = input.responseType || '';
+    const normalizedResponseType = input.responseType || 'Not interested'; // Default response type when removing from DNC
     const normalizedClosed = input.closed || '';
     metadata = setMarker(metadata, FOLLOW_UP_MARKER, input.nextFollowUpAt || null);
     metadata = setMarker(metadata, ARCHIVED_MARKER, null);
