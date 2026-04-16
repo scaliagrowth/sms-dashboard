@@ -22,13 +22,19 @@ export async function POST(request: Request) {
       notes: String(body.notes ?? '').trim(),
       nextFollowUpAt: String(body.nextFollowUpAt ?? '').trim(),
       markDnc: Boolean(body.markDnc),
+      removeDnc: Boolean(body.removeDnc),
     };
 
     if (!payload.phone) {
       return NextResponse.json({ error: 'Phone is required.' }, { status: 400 });
     }
 
-    if (!payload.markDnc && !validResponseTypes.includes(payload.responseType)) {
+    // Handle DNC removal - this bypasses response type validation to allow DNC removal
+    if (payload.removeDnc) {
+      if (!validResponseTypes.includes(payload.responseType) && payload.responseType !== '') {
+        return NextResponse.json({ error: 'Invalid response type when removing from DNC.' }, { status: 400 });
+      }
+    } else if (!payload.markDnc && !validResponseTypes.includes(payload.responseType)) {
       return NextResponse.json({ error: 'Invalid response type.' }, { status: 400 });
     }
 

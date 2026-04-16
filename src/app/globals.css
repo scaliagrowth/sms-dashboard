@@ -553,6 +553,10 @@ button, textarea, select, input {
   background: linear-gradient(90deg, #16a34a 0%, #22c55e 100%) !important;
 }
 
+.warningButton {
+  background: linear-gradient(90deg, #f59e0b 0%, #f97316 100%) !important;
+}
+
 .saveSuccess {
   color: #86efac;
   font-size: 13px;

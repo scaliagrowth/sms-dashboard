@@ -69,4 +69,5 @@ export type LeadUpdateInput = {
   notes: string;
   nextFollowUpAt: string;
   markDnc: boolean;
+  removeDnc: boolean;
 };

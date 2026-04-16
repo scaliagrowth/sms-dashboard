@@ -37,6 +37,7 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
     notes: '',
     nextFollowUpAt: '',
     markDnc: false,
+    removeDnc: false,
   });
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -55,6 +56,7 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
       notes: detail?.lead?.notes || '',
       nextFollowUpAt: toDatetimeLocalValue(detail?.lead?.nextFollowUpAt),
       markDnc: detail?.lead?.responseType === 'DNC',
+      removeDnc: false,
     });
     setSaveMessage(null);
     setSaveError(null);
@@ -196,7 +198,11 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
         <div className="editorActions">
           <button onClick={() => handleSave({ markDnc: false })} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
           <button className="successButton" onClick={() => handleSave({ markDnc: false, responseType: 'Highly interested' }, 'Marked as highly interested.')} disabled={saving}>Highly interested</button>
-          <button className="dangerButton" onClick={() => handleSave({ markDnc: true, responseType: '', closed: '', nextFollowUpAt: '' })} disabled={saving}>Mark DNC</button>
+          {detail?.conversation.workflowStatus === 'dnc' ? (
+            <button className="warningButton" onClick={() => handleSave({ removeDnc: true, responseType: '', closed: '', nextFollowUpAt: '' }, 'Removed from DNC - can now text manually.')} disabled={saving}>Remove from DNC</button>
+          ) : (
+            <button className="dangerButton" onClick={() => handleSave({ markDnc: true, responseType: '', closed: '', nextFollowUpAt: '' })} disabled={saving}>Mark DNC</button>
+          )}
           {saveMessage ? <span className="saveSuccess">{saveMessage}</span> : null}
           {saveError ? <span className="errorText">{saveError}</span> : null}
         </div>
