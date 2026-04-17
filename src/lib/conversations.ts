@@ -38,9 +38,22 @@ function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolea
 }
 
 function getWorkflowStatus(lead: LeadRow | null): LeadWorkflowStatus {
-  if ((lead?.responseType || '').trim().toUpperCase() === 'DNC') return 'dnc';
-  if ((lead?.closed || '').trim().toLowerCase() === 'yes') return 'closed';
-  if (lead?.nextFollowUpAt) return 'follow-up';
+  // Check DNC first - case insensitive
+  if (lead?.responseType && (lead.responseType.trim().toUpperCase() === 'DNC')) {
+    return 'dnc';
+  }
+  
+  // Check closed status - case insensitive
+  if (lead?.closed && (lead.closed.trim().toLowerCase() === 'yes')) {
+    return 'closed';
+  }
+  
+  // Check for follow-up
+  if (lead?.nextFollowUpAt) {
+    return 'follow-up';
+  }
+  
+  // Default to active
   return 'active';
 }
 

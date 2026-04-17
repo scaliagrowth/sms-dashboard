@@ -14,16 +14,19 @@ type FilterMode = 'work' | 'highly-interested' | 'active' | 'follow-up' | 'close
 
 function sortConversations(items: ConversationSummary[]): ConversationSummary[] {
   return [...items].sort((a, b) => {
-    // Manual follow-ups with "needs response" should be at the top
-    const aIsManualFollowUp = a.nextFollowUpAt && !a.lastMessageAt;
-    const bIsManualFollowUp = b.nextFollowUpAt && !b.lastMessageAt;
+    // Manual follow-ups (needs response + has follow-up time) should be at the top
+    const aIsManualFollowUp = a.needsResponse && a.nextFollowUpAt;
+    const bIsManualFollowUp = b.needsResponse && b.nextFollowUpAt;
     
     if (aIsManualFollowUp && !bIsManualFollowUp) return -1;
     if (!aIsManualFollowUp && bIsManualFollowUp) return 1;
+    
+    // Then regular needs responses
     if (a.needsResponse !== b.needsResponse) {
       return a.needsResponse ? -1 : 1;
     }
-
+    
+    // Then by last message time
     const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
     const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
     return bTime - aTime;
@@ -55,7 +58,7 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
           phone,
           markDnc: false,
           removeDnc: false,
-          responseType: '',
+          responseType: 'Not interested',
           notes: 'Needs response cleared manually',
         }),
       });
@@ -63,6 +66,9 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
       if (response.ok) {
         // Reload the page to refresh everything
         window.location.reload();
+      } else {
+        const errorData = await response.json();
+        alert('Failed to clear response: ' + (errorData.error || 'Unknown error'));
       }
     } catch (error) {
       console.error('Failed to clear needs response:', error);

@@ -256,12 +256,16 @@ export async function updateLeadFields(input: LeadUpdateInput): Promise<LeadRow 
       dncAt: handledAt,
     } as any, sheets, spreadsheetId, headers, notesColumn, metadataColumn);
   } else if (input.removeDnc) {
-    // Remove from DNC (manual override) - simplified version
+    // Remove from DNC (manual override) - comprehensive version
     const normalizedResponseType = 'Not interested'; // Always set to a clear response type
     const normalizedClosed = '';
     metadata = setMarker(metadata, FOLLOW_UP_MARKER, null);
     metadata = setMarker(metadata, ARCHIVED_MARKER, null);
     metadata = setMarker(metadata, DNC_MARKER, null); // Clear DNC completely
+    
+    console.log('Removing from DNC for phone:', input.phone);
+    console.log('Setting responseType to:', normalizedResponseType);
+    console.log('Current DNC marker:', lead.dncAt);
     
     return updateLeadInSheet(lead, {
       ...input,

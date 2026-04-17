@@ -100,10 +100,6 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
       
       // Parse the response to get updated data
       const result = await response.json();
-      console.log('DNC Removal Result:', result);
-
-      // Parse the response to get updated data
-      const result = await response.json();
       
       // Update local form state with the new values from the server
       if (result.success && result.updatedLead) {
@@ -122,8 +118,13 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
       setForm(nextForm);
       setSaveMessage(successMessage || (nextForm.markDnc ? 'Marked as DNC and archived.' : 'Saved'));
       if (onUpdated) {
-        // Only refresh the specific conversation, not the entire list
-        await onUpdated();
+        // For DNC changes, force a full refresh to ensure workflow status updates
+        if (nextForm.markDnc || nextForm.removeDnc) {
+          // Force refresh all data when DNC status changes
+          window.location.reload();
+        } else {
+          await onUpdated();
+        }
       }
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Failed to update lead details.');

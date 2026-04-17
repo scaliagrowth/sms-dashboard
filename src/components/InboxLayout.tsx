@@ -89,6 +89,14 @@ export function InboxLayout() {
     }
   }
 
+  // Force refresh all data when needed
+  async function forceRefreshAll() {
+    await loadConversations();
+    if (selectedPhone) {
+      await loadConversation(selectedPhone);
+    }
+  }
+
   function handleSelectConversation(phone: string) {
     setSelectedPhone(phone);
     if (typeof window !== 'undefined' && window.innerWidth <= 760) {
