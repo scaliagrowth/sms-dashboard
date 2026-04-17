@@ -96,6 +96,12 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
         }),
       });
 
+      console.log('DNC Removal Response:', response);
+      
+      // Parse the response to get updated data
+      const result = await response.json();
+      console.log('DNC Removal Result:', result);
+
       // Parse the response to get updated data
       const result = await response.json();
       
