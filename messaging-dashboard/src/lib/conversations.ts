@@ -14,9 +14,7 @@ function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolea
   if ((lead?.closed || '').trim().toLowerCase() === 'yes') return false;
 
   const sheetFlag = (lead?.needsResponseFlag || '').trim().toLowerCase();
-  if (sheetFlag === 'yes') return true;
-
-  if (!messages.length) return false;
+  if (!messages.length) return sheetFlag === 'yes';
 
   const lastInboundIndex = [...messages].reverse().findIndex((message) => message.direction === 'inbound');
   if (lastInboundIndex === -1) return false;
