@@ -10,9 +10,13 @@ function getConversationPhone(message: { from: string; to: string }, twilioNumbe
 }
 
 function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolean {
-  if (!messages.length) return false;
   if ((lead?.responseType || '').trim().toUpperCase() === 'DNC') return false;
   if ((lead?.closed || '').trim().toLowerCase() === 'yes') return false;
+
+  const sheetFlag = (lead?.needsResponseFlag || '').trim().toLowerCase();
+  if (sheetFlag === 'yes') return true;
+
+  if (!messages.length) return false;
 
   const lastInboundIndex = [...messages].reverse().findIndex((message) => message.direction === 'inbound');
   if (lastInboundIndex === -1) return false;
@@ -38,9 +42,22 @@ function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolea
 }
 
 function getWorkflowStatus(lead: LeadRow | null): LeadWorkflowStatus {
-  if ((lead?.responseType || '').trim().toUpperCase() === 'DNC') return 'dnc';
-  if ((lead?.closed || '').trim().toLowerCase() === 'yes') return 'closed';
-  if (lead?.nextFollowUpAt) return 'follow-up';
+  // Check DNC first - case insensitive
+  if (lead?.responseType && (lead.responseType.trim().toUpperCase() === 'DNC')) {
+    return 'dnc';
+  }
+  
+  // Check closed status - case insensitive
+  if (lead?.closed && (lead.closed.trim().toLowerCase() === 'yes')) {
+    return 'closed';
+  }
+  
+  // Check for follow-up
+  if (lead?.nextFollowUpAt) {
+    return 'follow-up';
+  }
+  
+  // Default to active
   return 'active';
 }
 

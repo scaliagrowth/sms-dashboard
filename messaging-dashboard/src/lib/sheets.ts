@@ -80,12 +80,16 @@ function getNotesColumnLetter(lead: LeadRow): string {
   return lead.notesColumn;
 }
 
-function getMetadataColumnLetter(headers: string[]): string {
-  const column = findColumnLetter(headers, DASHBOARD_METADATA_HEADER);
+function getRequiredColumnLetter(headers: string[], headerName: string): string {
+  const column = findColumnLetter(headers, headerName);
   if (!column) {
-    throw new Error(`Missing required sheet column: ${DASHBOARD_METADATA_HEADER}`);
+    throw new Error(`Missing required sheet column: ${headerName}`);
   }
   return column;
+}
+
+function getMetadataColumnLetter(headers: string[]): string {
+  return getRequiredColumnLetter(headers, DASHBOARD_METADATA_HEADER);
 }
 
 async function updateLeadInSheet(
@@ -103,18 +107,26 @@ async function updateLeadInSheet(
   notesColumn: string,
   metadataColumn: string
 ): Promise<LeadRow> {
+  const businessNameColumn = getRequiredColumnLetter(headers, 'Business Name');
+  const nicheColumn = getRequiredColumnLetter(headers, 'Niche');
+  const responseTypeColumn = getRequiredColumnLetter(headers, 'Response Type (Interested / More Info / Not Interested)');
+  const settingCallColumn = getRequiredColumnLetter(headers, 'Setting Call Booked');
+  const zoomBookedColumn = getRequiredColumnLetter(headers, 'Zoom Booked');
+  const showedColumn = getRequiredColumnLetter(headers, 'Showed');
+  const closedColumn = getRequiredColumnLetter(headers, 'Closed');
+
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId,
     requestBody: {
       valueInputOption: 'USER_ENTERED',
       data: [
-        { range: `${SHEET_NAME}!B${lead.rowNumber}`, values: [[input.businessName]] },
-        { range: `${SHEET_NAME}!D${lead.rowNumber}`, values: [[input.niche]] },
-        { range: `${SHEET_NAME}!G${lead.rowNumber}`, values: [[input.responseType]] },
-        { range: `${SHEET_NAME}!J${lead.rowNumber}`, values: [[input.settingCallBooked]] },
-        { range: `${SHEET_NAME}!K${lead.rowNumber}`, values: [[input.zoomBooked]] },
-        { range: `${SHEET_NAME}!L${lead.rowNumber}`, values: [[input.showed]] },
-        { range: `${SHEET_NAME}!M${lead.rowNumber}`, values: [[input.closed]] },
+        { range: `${SHEET_NAME}!${businessNameColumn}${lead.rowNumber}`, values: [[input.businessName]] },
+        { range: `${SHEET_NAME}!${nicheColumn}${lead.rowNumber}`, values: [[input.niche]] },
+        { range: `${SHEET_NAME}!${responseTypeColumn}${lead.rowNumber}`, values: [[input.responseType]] },
+        { range: `${SHEET_NAME}!${settingCallColumn}${lead.rowNumber}`, values: [[input.settingCallBooked]] },
+        { range: `${SHEET_NAME}!${zoomBookedColumn}${lead.rowNumber}`, values: [[input.zoomBooked]] },
+        { range: `${SHEET_NAME}!${showedColumn}${lead.rowNumber}`, values: [[input.showed]] },
+        { range: `${SHEET_NAME}!${closedColumn}${lead.rowNumber}`, values: [[input.closed]] },
         { range: `${SHEET_NAME}!${notesColumn}${lead.rowNumber}`, values: [[input.notes]] },
         { range: `${SHEET_NAME}!${metadataColumn}${lead.rowNumber}`, values: [[input.metadata]] },
       ],
@@ -139,30 +151,33 @@ async function updateLeadInSheet(
 }
 
 function toLeadRow(values: string[], rowNumber: number, headers: string[]): LeadRow {
-  const message3Enabled = hasMessage3Column(values);
-  const notes = message3Enabled ? values[14] ?? '' : values[13] ?? '';
-  const metadataColumn = findColumnLetter(headers, DASHBOARD_METADATA_HEADER);
-  const metadataIndex = metadataColumn ? headers.findIndex((header) => header.trim().toLowerCase() === DASHBOARD_METADATA_HEADER.toLowerCase()) : -1;
-  const metadata = metadataIndex >= 0 ? values[metadataIndex] ?? '' : notes;
+  const byHeader = (name: string) => {
+    const idx = headers.findIndex((header) => header.trim().toLowerCase() === name.trim().toLowerCase());
+    return idx >= 0 ? values[idx] ?? '' : '';
+  };
+
+  const notesColumn = getRequiredColumnLetter(headers, 'Notes');
+  const metadata = byHeader(DASHBOARD_METADATA_HEADER) || byHeader('Notes');
 
   return {
     rowNumber,
-    businessName: values[1] ?? '',
-    phone: values[2] ?? '',
-    normalizedPhone: normalizePhone(values[2] ?? ''),
-    niche: values[3] ?? '',
-    message1Sent: values[4] ?? '',
-    replied: values[5] ?? '',
-    responseType: values[6] ?? '',
-    replyText: values[7] ?? '',
-    message2Sent: values[8] ?? '',
-    settingCallBooked: values[9] ?? '',
-    zoomBooked: values[10] ?? '',
-    showed: values[11] ?? '',
-    closed: values[12] ?? '',
-    message3Sent: message3Enabled ? values[13] ?? '' : '',
-    notes,
-    notesColumn: message3Enabled ? 'O' : 'N',
+    businessName: byHeader('Business Name'),
+    phone: byHeader('Phone'),
+    normalizedPhone: normalizePhone(byHeader('Phone')),
+    niche: byHeader('Niche'),
+    message1Sent: byHeader('Message 1 Sent'),
+    replied: byHeader('Replied (Y/N)'),
+    responseType: byHeader('Response Type (Interested / More Info / Not Interested)'),
+    replyText: byHeader('Reply Text'),
+    message2Sent: byHeader('Message 2 Sent'),
+    settingCallBooked: byHeader('Setting Call Booked'),
+    zoomBooked: byHeader('Zoom Booked'),
+    showed: byHeader('Showed'),
+    closed: byHeader('Closed'),
+    message3Sent: byHeader('Message 3 Sent'),
+    notes: byHeader('Notes'),
+    notesColumn,
+    needsResponseFlag: byHeader('Needs Response'),
     handledAfterMsg2At: extractMarker(metadata, HANDLED_MARKER),
     archivedAt: extractMarker(metadata, ARCHIVED_MARKER),
     nextFollowUpAt: extractMarker(metadata, FOLLOW_UP_MARKER),
@@ -256,23 +271,27 @@ export async function updateLeadFields(input: LeadUpdateInput): Promise<LeadRow 
       dncAt: handledAt,
     } as any, sheets, spreadsheetId, headers, notesColumn, metadataColumn);
   } else if (input.removeDnc) {
-    // Remove from DNC (manual override)
-    const normalizedResponseType = input.responseType || '';
-    const normalizedClosed = input.closed || '';
-    metadata = setMarker(metadata, FOLLOW_UP_MARKER, input.nextFollowUpAt || null);
+    // Remove from DNC (manual override) - comprehensive version
+    const normalizedResponseType = 'Not interested'; // Always set to a clear response type
+    const normalizedClosed = '';
+    metadata = setMarker(metadata, FOLLOW_UP_MARKER, null);
     metadata = setMarker(metadata, ARCHIVED_MARKER, null);
-    // Keep DNC marker for history but allow texting
+    metadata = setMarker(metadata, DNC_MARKER, null); // Clear DNC completely
+    
+    console.log('Removing from DNC for phone:', input.phone);
+    console.log('Setting responseType to:', normalizedResponseType);
+    console.log('Current DNC marker:', lead.dncAt);
     
     return updateLeadInSheet(lead, {
       ...input,
       responseType: normalizedResponseType,
       closed: normalizedClosed,
-      notes,
+      notes: `Removed from DNC: ${notes}`,
       metadata,
       handledAfterMsg2At: handledAt,
-      nextFollowUpAt: input.nextFollowUpAt || null,
+      nextFollowUpAt: null,
       archivedAt: null,
-      dncAt: lead.dncAt, // preserve original DNC timestamp
+      dncAt: null,
     } as any, sheets, spreadsheetId, headers, notesColumn, metadataColumn);
   } else {
     // Normal update

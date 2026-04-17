@@ -15,7 +15,8 @@ export type LeadRow = {
   closed: string;
   message3Sent: string;
   notes: string;
-  notesColumn: 'N' | 'O';
+  notesColumn: string;
+  needsResponseFlag?: string;
   handledAfterMsg2At?: string | null;
   archivedAt?: string | null;
   nextFollowUpAt?: string | null;
