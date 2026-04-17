@@ -165,7 +165,8 @@ button, textarea, select, input {
   border-color: rgba(126, 179, 255, 0.35);
 }
 
-.conversationList {
+.conversationList,
+.conversationListContainer {
   display: flex;
   flex-direction: column;
   overflow-y: auto;

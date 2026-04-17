@@ -55,25 +55,18 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
           phone,
           markDnc: false,
           removeDnc: false,
-          // Keep all other fields as they are
           responseType: '',
-          businessName: '',
-          niche: '',
-          settingCallBooked: '',
-          zoomBooked: '',
-          showed: '',
-          closed: '',
-          notes: '',
-          nextFollowUpAt: '',
+          notes: 'Needs response cleared manually',
         }),
       });
       
       if (response.ok) {
-        // Refresh the list to update the UI
+        // Reload the page to refresh everything
         window.location.reload();
       }
     } catch (error) {
       console.error('Failed to clear needs response:', error);
+      alert('Failed to clear response status');
     }
   };
 

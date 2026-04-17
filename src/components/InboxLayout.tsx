@@ -16,17 +16,10 @@ export function InboxLayout() {
   const [error, setError] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<'list' | 'thread'>('list');
   const [isMobile, setIsMobile] = useState(false);
-  const scrollPositionRef = useRef(0);
-  const listContainerRef = useRef<HTMLDivElement>(null);
 
   async function loadConversations() {
     try {
       setLoadingList(true);
-      // Save scroll position before reloading
-      if (listContainerRef.current) {
-        scrollPositionRef.current = listContainerRef.current.scrollTop;
-      }
-      
       const response = await fetch('/api/conversations', { cache: 'no-store' });
       if (!response.ok) throw new Error('Failed to load conversations.');
       const data = await response.json();
@@ -106,15 +99,6 @@ export function InboxLayout() {
   const showList = !isMobile || mobileView === 'list';
   const showThread = !isMobile || mobileView === 'thread';
 
-  // Restore scroll position after list updates
-  useEffect(() => {
-    if (listContainerRef.current && conversations.length > 0) {
-      requestAnimationFrame(() => {
-        listContainerRef.current!.scrollTop = scrollPositionRef.current;
-      });
-    }
-  }, [conversations]);
-
   return (
     <main className="appShell">
       <header className="appHeader">
@@ -131,9 +115,7 @@ export function InboxLayout() {
           loadingList ? (
             <aside className="sidebar emptyState">Loading inbox…</aside>
           ) : (
-            <div ref={listContainerRef} className="conversationListContainer">
-              <ConversationList conversations={conversations} selectedPhone={selectedPhone} onSelect={handleSelectConversation} />
-            </div>
+            <ConversationList conversations={conversations} selectedPhone={selectedPhone} onSelect={handleSelectConversation} />
           )
         ) : null}
 
