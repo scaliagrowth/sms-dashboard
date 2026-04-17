@@ -16,6 +16,9 @@ function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolea
   const sheetFlag = (lead?.needsResponseFlag || '').trim().toLowerCase();
   if (!messages.length) return sheetFlag === 'yes';
 
+  const latestMessage = messages[messages.length - 1];
+  if (!latestMessage || latestMessage.direction !== 'inbound') return false;
+
   const lastInboundIndex = [...messages].reverse().findIndex((message) => message.direction === 'inbound');
   if (lastInboundIndex === -1) return false;
 
@@ -28,7 +31,7 @@ function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolea
   if (outboundBeforeInbound < 3) return false;
 
   const hasOutboundAfterInbound = messages.some(
-    (message) => message.direction === 'outbound' && new Date(message.dateCreated).getTime() > inboundAt,
+    (message) => message.direction === 'outbound' && new Date(message.dateCreated).getTime() >= inboundAt,
   );
 
   if (hasOutboundAfterInbound) return false;
