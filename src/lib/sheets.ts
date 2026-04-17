@@ -261,7 +261,8 @@ export async function updateLeadFields(input: LeadUpdateInput): Promise<LeadRow 
     const normalizedClosed = input.closed || '';
     metadata = setMarker(metadata, FOLLOW_UP_MARKER, input.nextFollowUpAt || null);
     metadata = setMarker(metadata, ARCHIVED_MARKER, null);
-    // Keep DNC marker for history but allow texting
+    // Clear DNC marker to remove DNC status completely
+    metadata = setMarker(metadata, DNC_MARKER, null);
     
     return updateLeadInSheet(lead, {
       ...input,
@@ -272,7 +273,7 @@ export async function updateLeadFields(input: LeadUpdateInput): Promise<LeadRow 
       handledAfterMsg2At: handledAt,
       nextFollowUpAt: input.nextFollowUpAt || null,
       archivedAt: null,
-      dncAt: lead.dncAt, // preserve original DNC timestamp
+      dncAt: null, // Clear DNC timestamp completely
     } as any, sheets, spreadsheetId, headers, notesColumn, metadataColumn);
   } else {
     // Normal update
