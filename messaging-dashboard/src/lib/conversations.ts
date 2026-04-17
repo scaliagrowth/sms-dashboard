@@ -13,8 +13,7 @@ function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolea
   if ((lead?.responseType || '').trim().toUpperCase() === 'DNC') return false;
   if ((lead?.closed || '').trim().toLowerCase() === 'yes') return false;
 
-  const sheetFlag = (lead?.needsResponseFlag || '').trim().toLowerCase();
-  if (!messages.length) return sheetFlag === 'yes';
+  if (!messages.length) return false;
 
   const latestMessage = messages[messages.length - 1];
   if (!latestMessage || latestMessage.direction !== 'inbound') return false;
@@ -85,7 +84,7 @@ function toConversationSummary(phone: string, messages: MessageItem[], lead: Lea
 }
 
 export async function getConversationSummaries(): Promise<ConversationSummary[]> {
-  const [recentMessages, leads] = await Promise.all([listRecentMessages(200), getLeads()]);
+  const [recentMessages, leads] = await Promise.all([listRecentMessages(1000), getLeads()]);
   const twilioNumber = normalizePhone(process.env.TWILIO_PHONE_NUMBER ?? '');
   const leadMap = new Map<string, LeadRow>();
 
