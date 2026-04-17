@@ -12,31 +12,22 @@ function getConversationPhone(message: { from: string; to: string }, twilioNumbe
 function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolean {
   if ((lead?.responseType || '').trim().toUpperCase() === 'DNC') return false;
   if ((lead?.closed || '').trim().toLowerCase() === 'yes') return false;
-
   if (!messages.length) return false;
 
+  // Badge should mean: lead spoke last and we have not replied after that.
   const latestMessage = messages[messages.length - 1];
   if (!latestMessage || latestMessage.direction !== 'inbound') return false;
 
-  const lastInboundIndex = [...messages].reverse().findIndex((message) => message.direction === 'inbound');
-  if (lastInboundIndex === -1) return false;
+  const latestInboundAt = new Date(latestMessage.dateCreated).getTime();
 
-  const inboundMessage = messages[messages.length - 1 - lastInboundIndex];
-  const inboundAt = new Date(inboundMessage.dateCreated).getTime();
-  const outboundBeforeInbound = messages.filter(
-    (message) => message.direction === 'outbound' && new Date(message.dateCreated).getTime() < inboundAt,
-  ).length;
-
-  if (outboundBeforeInbound < 3) return false;
-
-  const hasOutboundAfterInbound = messages.some(
-    (message) => message.direction === 'outbound' && new Date(message.dateCreated).getTime() >= inboundAt,
+  const hasOutboundAfterLatestInbound = messages.some(
+    (message) => message.direction === 'outbound' && new Date(message.dateCreated).getTime() > latestInboundAt,
   );
 
-  if (hasOutboundAfterInbound) return false;
+  if (hasOutboundAfterLatestInbound) return false;
 
   const handledAt = lead?.handledAfterMsg2At ? new Date(lead.handledAfterMsg2At).getTime() : 0;
-  if (handledAt && handledAt >= inboundAt) return false;
+  if (handledAt && handledAt >= latestInboundAt) return false;
 
   return true;
 }
