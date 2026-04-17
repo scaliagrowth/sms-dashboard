@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DNC Test</title>
+</head>
+<body>
+    <h1>DNC Removal Test</h1>
+    <div id="result"></div>
+    
+    <script>
+        async function testDNCRemoval() {
+            const phone = '1234567890'; // Replace with actual test phone
+            
+            try {
+                const response = await fetch('/api/leads/update-status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        phone: phone,
+                        removeDnc: true,
+                        responseType: 'Not interested',
+                        notes: 'Test DNC removal'
+                    }),
+                });
+                
+                const data = await response.json();
+                document.getElementById('result').innerHTML = `
+                    <h3>Response Status: ${response.status}</h3>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                document.getElementById('result').innerHTML = `
+                    <h3>Error:</h3>
+                    <pre>${error.message}</pre>
+                `;
+            }
+        }
+    </script>
+    
+    <button onclick="testDNCRemoval()">Test DNC Removal</button>
+</body>
+</html>

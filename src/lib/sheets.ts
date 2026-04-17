@@ -256,24 +256,23 @@ export async function updateLeadFields(input: LeadUpdateInput): Promise<LeadRow 
       dncAt: handledAt,
     } as any, sheets, spreadsheetId, headers, notesColumn, metadataColumn);
   } else if (input.removeDnc) {
-    // Remove from DNC (manual override)
-    const normalizedResponseType = input.responseType || 'Not interested'; // Default response type when removing from DNC
-    const normalizedClosed = input.closed || '';
-    metadata = setMarker(metadata, FOLLOW_UP_MARKER, input.nextFollowUpAt || null);
+    // Remove from DNC (manual override) - simplified version
+    const normalizedResponseType = 'Not interested'; // Always set to a clear response type
+    const normalizedClosed = '';
+    metadata = setMarker(metadata, FOLLOW_UP_MARKER, null);
     metadata = setMarker(metadata, ARCHIVED_MARKER, null);
-    // Clear DNC marker to remove DNC status completely
-    metadata = setMarker(metadata, DNC_MARKER, null);
+    metadata = setMarker(metadata, DNC_MARKER, null); // Clear DNC completely
     
     return updateLeadInSheet(lead, {
       ...input,
       responseType: normalizedResponseType,
       closed: normalizedClosed,
-      notes,
+      notes: `Removed from DNC: ${notes}`,
       metadata,
       handledAfterMsg2At: handledAt,
-      nextFollowUpAt: input.nextFollowUpAt || null,
+      nextFollowUpAt: null,
       archivedAt: null,
-      dncAt: null, // Clear DNC timestamp completely
+      dncAt: null,
     } as any, sheets, spreadsheetId, headers, notesColumn, metadataColumn);
   } else {
     // Normal update
