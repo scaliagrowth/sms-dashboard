@@ -26,12 +26,11 @@ function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): { valu
       : { value: false, reason: 'no_messages' };
   }
 
-  // Badge should mean: lead spoke last and we have not replied after that.
+  // Badge means: lead spoke last and we have not replied after that.
+  // Never allow stale sheet flags to override this once message history is present.
   const latestMessage = messages[messages.length - 1];
   if (!latestMessage || latestMessage.direction !== 'inbound') {
-    return sheetFlaggedNeedsResponse
-      ? { value: true, reason: 'sheet_flag_override_latest_not_inbound' }
-      : { value: false, reason: 'latest_not_inbound' };
+    return { value: false, reason: 'latest_not_inbound' };
   }
 
   const latestInboundAt = new Date(latestMessage.dateCreated).getTime();
@@ -40,18 +39,10 @@ function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): { valu
     (message) => message.direction === 'outbound' && new Date(message.dateCreated).getTime() > latestInboundAt,
   );
 
-  if (hasOutboundAfterLatestInbound) {
-    return sheetFlaggedNeedsResponse
-      ? { value: true, reason: 'sheet_flag_override_outbound_after_inbound' }
-      : { value: false, reason: 'outbound_after_inbound' };
-  }
+  if (hasOutboundAfterLatestInbound) return { value: false, reason: 'outbound_after_inbound' };
 
   const handledAt = lead?.handledAfterMsg2At ? new Date(lead.handledAfterMsg2At).getTime() : 0;
-  if (handledAt && handledAt >= latestInboundAt) {
-    return sheetFlaggedNeedsResponse
-      ? { value: true, reason: 'sheet_flag_override_handled_after_inbound' }
-      : { value: false, reason: 'handled_after_inbound' };
-  }
+  if (handledAt && handledAt >= latestInboundAt) return { value: false, reason: 'handled_after_inbound' };
 
   return { value: true, reason: 'lead_spoke_last' };
 }
