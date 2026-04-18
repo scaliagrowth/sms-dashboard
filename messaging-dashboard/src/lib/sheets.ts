@@ -177,8 +177,9 @@ function toLeadRow(values: string[], rowNumber: number, headers: string[]): Lead
     message3Sent: byHeader('Message 3 Sent'),
     notes: byHeader('Notes'),
     notesColumn,
-    // Dashboard-only badge signal (kept separate from any legacy automation columns)
-    needsResponseFlag: byHeader('Dashboard Needs Response'),
+    // Read-only: dashboard-specific flag first, then legacy fallback for older rows.
+    // This does NOT write/modify automation columns.
+    needsResponseFlag: byHeader('Dashboard Needs Response') || byHeader('Needs Response'),
     handledAfterMsg2At: extractMarker(metadata, HANDLED_MARKER),
     archivedAt: extractMarker(metadata, ARCHIVED_MARKER),
     nextFollowUpAt: extractMarker(metadata, FOLLOW_UP_MARKER),

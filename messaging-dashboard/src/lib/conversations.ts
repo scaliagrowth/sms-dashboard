@@ -9,23 +9,26 @@ function getConversationPhone(message: { from: string; to: string }, twilioNumbe
   return from === twilioNumber ? to : from;
 }
 
-function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolean {
-  if ((lead?.responseType || '').trim().toUpperCase() === 'DNC') return false;
-  if ((lead?.closed || '').trim().toLowerCase() === 'yes') return false;
+function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): { value: boolean; reason: string } {
+  if ((lead?.responseType || '').trim().toUpperCase() === 'DNC') return { value: false, reason: 'dnc' };
+  if ((lead?.closed || '').trim().toLowerCase() === 'yes') return { value: false, reason: 'closed' };
+
   const sheetFlag = (lead?.needsResponseFlag || '').trim().toLowerCase();
+
   if (!messages.length) {
-    if (sheetFlag === 'yes') return true;
+    if (sheetFlag === 'yes') return { value: true, reason: 'sheet_flag_yes' };
 
     // Fallback for older leads with incomplete dashboard flag history:
-    // if they replied and were not marked handled/closed/DNC, surface for manual follow-up.
     const replied = (lead?.replied || '').trim().toLowerCase() === 'yes';
     const hasReplyText = Boolean((lead?.replyText || '').trim());
-    return replied && hasReplyText;
+    if (replied && hasReplyText) return { value: true, reason: 'legacy_reply_fallback' };
+
+    return { value: false, reason: 'no_messages_no_fallback' };
   }
 
   // Badge should mean: lead spoke last and we have not replied after that.
   const latestMessage = messages[messages.length - 1];
-  if (!latestMessage || latestMessage.direction !== 'inbound') return false;
+  if (!latestMessage || latestMessage.direction !== 'inbound') return { value: false, reason: 'latest_not_inbound' };
 
   const latestInboundAt = new Date(latestMessage.dateCreated).getTime();
 
@@ -33,12 +36,12 @@ function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolea
     (message) => message.direction === 'outbound' && new Date(message.dateCreated).getTime() > latestInboundAt,
   );
 
-  if (hasOutboundAfterLatestInbound) return false;
+  if (hasOutboundAfterLatestInbound) return { value: false, reason: 'outbound_after_inbound' };
 
   const handledAt = lead?.handledAfterMsg2At ? new Date(lead.handledAfterMsg2At).getTime() : 0;
-  if (handledAt && handledAt >= latestInboundAt) return false;
+  if (handledAt && handledAt >= latestInboundAt) return { value: false, reason: 'handled_after_inbound' };
 
-  return true;
+  return { value: true, reason: 'lead_spoke_last' };
 }
 
 function getWorkflowStatus(lead: LeadRow | null): LeadWorkflowStatus {
@@ -64,6 +67,7 @@ function getWorkflowStatus(lead: LeadRow | null): LeadWorkflowStatus {
 function toConversationSummary(phone: string, messages: MessageItem[], lead: LeadRow | null): ConversationSummary {
   const sortedMessages = [...messages].sort((a, b) => new Date(a.dateCreated).getTime() - new Date(b.dateCreated).getTime());
   const latestMessage = sortedMessages[sortedMessages.length - 1] ?? null;
+  const needs = getNeedsResponse(sortedMessages, lead);
 
   return {
     phone,
@@ -76,7 +80,8 @@ function toConversationSummary(phone: string, messages: MessageItem[], lead: Lea
     lastMessageAt: latestMessage?.dateCreated ?? null,
     lastMessageBody: latestMessage?.body ?? null,
     lastDirection: latestMessage?.direction ?? null,
-    needsResponse: getNeedsResponse(sortedMessages, lead),
+    needsResponse: needs.value,
+    needsResponseReason: needs.reason,
     workflowStatus: getWorkflowStatus(lead),
     isArchived: Boolean(lead?.archivedAt),
     nextFollowUpAt: lead?.nextFollowUpAt ?? null,

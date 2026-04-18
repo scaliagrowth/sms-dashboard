@@ -47,6 +47,7 @@ export type ConversationSummary = {
   lastMessageBody: string | null;
   lastDirection: 'inbound' | 'outbound' | null;
   needsResponse: boolean;
+  needsResponseReason?: string;
   workflowStatus: LeadWorkflowStatus;
   isArchived: boolean;
   nextFollowUpAt: string | null;
