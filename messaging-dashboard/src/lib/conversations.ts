@@ -9,19 +9,30 @@ function getConversationPhone(message: { from: string; to: string }, twilioNumbe
   return from === twilioNumber ? to : from;
 }
 
+function parseSheetFlag(value: string | null | undefined): boolean {
+  const normalized = (value || '').trim().toLowerCase();
+  return ['yes', 'y', 'true', '1'].includes(normalized);
+}
+
 function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): { value: boolean; reason: string } {
   if ((lead?.responseType || '').trim().toUpperCase() === 'DNC') return { value: false, reason: 'dnc' };
   if ((lead?.closed || '').trim().toLowerCase() === 'yes') return { value: false, reason: 'closed' };
 
+  const sheetFlaggedNeedsResponse = parseSheetFlag(lead?.needsResponseFlag);
+
   if (!messages.length) {
-    // Safe mode: never infer needs-response from sheet reply fields alone.
-    // This avoids stale false positives on older leads.
-    return { value: false, reason: 'no_messages' };
+    return sheetFlaggedNeedsResponse
+      ? { value: true, reason: 'sheet_flag_no_messages' }
+      : { value: false, reason: 'no_messages' };
   }
 
   // Badge should mean: lead spoke last and we have not replied after that.
   const latestMessage = messages[messages.length - 1];
-  if (!latestMessage || latestMessage.direction !== 'inbound') return { value: false, reason: 'latest_not_inbound' };
+  if (!latestMessage || latestMessage.direction !== 'inbound') {
+    return sheetFlaggedNeedsResponse
+      ? { value: true, reason: 'sheet_flag_override_latest_not_inbound' }
+      : { value: false, reason: 'latest_not_inbound' };
+  }
 
   const latestInboundAt = new Date(latestMessage.dateCreated).getTime();
 
@@ -29,10 +40,18 @@ function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): { valu
     (message) => message.direction === 'outbound' && new Date(message.dateCreated).getTime() > latestInboundAt,
   );
 
-  if (hasOutboundAfterLatestInbound) return { value: false, reason: 'outbound_after_inbound' };
+  if (hasOutboundAfterLatestInbound) {
+    return sheetFlaggedNeedsResponse
+      ? { value: true, reason: 'sheet_flag_override_outbound_after_inbound' }
+      : { value: false, reason: 'outbound_after_inbound' };
+  }
 
   const handledAt = lead?.handledAfterMsg2At ? new Date(lead.handledAfterMsg2At).getTime() : 0;
-  if (handledAt && handledAt >= latestInboundAt) return { value: false, reason: 'handled_after_inbound' };
+  if (handledAt && handledAt >= latestInboundAt) {
+    return sheetFlaggedNeedsResponse
+      ? { value: true, reason: 'sheet_flag_override_handled_after_inbound' }
+      : { value: false, reason: 'handled_after_inbound' };
+  }
 
   return { value: true, reason: 'lead_spoke_last' };
 }

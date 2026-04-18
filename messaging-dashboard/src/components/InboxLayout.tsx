@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { ConversationList } from './ConversationList';
 import { ChatThread } from './ChatThread';
 import { LeadDetailsPanel } from './LeadDetailsPanel';
@@ -66,17 +66,46 @@ export function InboxLayout() {
   }, [selectedPhone]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    const refresh = () => {
       void loadConversations();
       if (selectedPhone) {
         void loadConversation(selectedPhone);
       }
-    }, 30000);
+    };
 
-    return () => clearInterval(interval);
+    // Keep inbox near-real-time so new inbound messages surface quickly.
+    const interval = setInterval(refresh, 8000);
+
+    const onFocus = () => refresh();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [selectedPhone]);
 
-  async function refreshSelectedConversation() {
+  async function refreshSelectedConversation(phone?: string) {
+    // If a specific phone is provided, only refresh that conversation
+    if (phone) {
+      await loadConversation(phone);
+    } else {
+      // Otherwise, refresh everything
+      await loadConversations();
+      if (selectedPhone) {
+        await loadConversation(selectedPhone);
+      }
+    }
+  }
+
+  // Force refresh all data when needed
+  async function forceRefreshAll() {
     await loadConversations();
     if (selectedPhone) {
       await loadConversation(selectedPhone);
