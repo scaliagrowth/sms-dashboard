@@ -13,7 +13,15 @@ function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolea
   if ((lead?.responseType || '').trim().toUpperCase() === 'DNC') return false;
   if ((lead?.closed || '').trim().toLowerCase() === 'yes') return false;
   const sheetFlag = (lead?.needsResponseFlag || '').trim().toLowerCase();
-  if (!messages.length) return sheetFlag === 'yes';
+  if (!messages.length) {
+    if (sheetFlag === 'yes') return true;
+
+    // Fallback for older leads with incomplete dashboard flag history:
+    // if they replied and were not marked handled/closed/DNC, surface for manual follow-up.
+    const replied = (lead?.replied || '').trim().toLowerCase() === 'yes';
+    const hasReplyText = Boolean((lead?.replyText || '').trim());
+    return replied && hasReplyText;
+  }
 
   // Badge should mean: lead spoke last and we have not replied after that.
   const latestMessage = messages[messages.length - 1];
