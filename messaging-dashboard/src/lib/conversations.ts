@@ -13,17 +13,10 @@ function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): { valu
   if ((lead?.responseType || '').trim().toUpperCase() === 'DNC') return { value: false, reason: 'dnc' };
   if ((lead?.closed || '').trim().toLowerCase() === 'yes') return { value: false, reason: 'closed' };
 
-  const sheetFlag = (lead?.needsResponseFlag || '').trim().toLowerCase();
-
   if (!messages.length) {
-    if (sheetFlag === 'yes') return { value: true, reason: 'sheet_flag_yes' };
-
-    // Fallback for older leads with incomplete dashboard flag history:
-    const replied = (lead?.replied || '').trim().toLowerCase() === 'yes';
-    const hasReplyText = Boolean((lead?.replyText || '').trim());
-    if (replied && hasReplyText) return { value: true, reason: 'legacy_reply_fallback' };
-
-    return { value: false, reason: 'no_messages_no_fallback' };
+    // Safe mode: never infer needs-response from sheet reply fields alone.
+    // This avoids stale false positives on older leads.
+    return { value: false, reason: 'no_messages' };
   }
 
   // Badge should mean: lead spoke last and we have not replied after that.
