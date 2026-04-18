@@ -17,9 +17,11 @@ export function InboxLayout() {
   const [mobileView, setMobileView] = useState<'list' | 'thread'>('list');
   const [isMobile, setIsMobile] = useState(false);
 
-  async function loadConversations() {
+  async function loadConversations(options?: { silent?: boolean }) {
+    const silent = options?.silent ?? false;
+
     try {
-      setLoadingList(true);
+      if (!silent) setLoadingList(true);
       const response = await fetch('/api/conversations', { cache: 'no-store' });
       if (!response.ok) throw new Error('Failed to load conversations.');
       const data = await response.json();
@@ -29,7 +31,7 @@ export function InboxLayout() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load conversations.');
     } finally {
-      setLoadingList(false);
+      if (!silent) setLoadingList(false);
     }
   }
 
@@ -67,26 +69,23 @@ export function InboxLayout() {
 
   useEffect(() => {
     const refresh = () => {
-      void loadConversations();
+      void loadConversations({ silent: true });
       if (selectedPhone) {
         void loadConversation(selectedPhone);
       }
     };
 
-    // Keep inbox near-real-time so new inbound messages surface quickly.
-    const interval = setInterval(refresh, 8000);
+    // Poll less aggressively to avoid disrupting manual browsing/search.
+    const interval = setInterval(refresh, 30000);
 
-    const onFocus = () => refresh();
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') refresh();
     };
 
-    window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
       clearInterval(interval);
-      window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [selectedPhone]);
