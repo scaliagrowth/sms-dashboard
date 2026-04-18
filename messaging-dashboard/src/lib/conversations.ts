@@ -12,7 +12,8 @@ function getConversationPhone(message: { from: string; to: string }, twilioNumbe
 function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolean {
   if ((lead?.responseType || '').trim().toUpperCase() === 'DNC') return false;
   if ((lead?.closed || '').trim().toLowerCase() === 'yes') return false;
-  if (!messages.length) return false;
+  const sheetFlag = (lead?.needsResponseFlag || '').trim().toLowerCase();
+  if (!messages.length) return sheetFlag === 'yes';
 
   // Badge should mean: lead spoke last and we have not replied after that.
   const latestMessage = messages[messages.length - 1];

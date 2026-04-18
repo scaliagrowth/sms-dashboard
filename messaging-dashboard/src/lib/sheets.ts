@@ -177,7 +177,7 @@ function toLeadRow(values: string[], rowNumber: number, headers: string[]): Lead
     message3Sent: byHeader('Message 3 Sent'),
     notes: byHeader('Notes'),
     notesColumn,
-    needsResponseFlag: byHeader('Needs Response'),
+    needsResponseFlag: byHeader('Dashboard Needs Response') || byHeader('Needs Response'),
     handledAfterMsg2At: extractMarker(metadata, HANDLED_MARKER),
     archivedAt: extractMarker(metadata, ARCHIVED_MARKER),
     nextFollowUpAt: extractMarker(metadata, FOLLOW_UP_MARKER),
