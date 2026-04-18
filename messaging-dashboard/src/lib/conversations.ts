@@ -9,22 +9,12 @@ function getConversationPhone(message: { from: string; to: string }, twilioNumbe
   return from === twilioNumber ? to : from;
 }
 
-function parseSheetFlag(value: string | null | undefined): boolean {
-  const normalized = (value || '').trim().toLowerCase();
-  return ['yes', 'y', 'true', '1'].includes(normalized);
-}
-
 function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): { value: boolean; reason: string } {
   if ((lead?.responseType || '').trim().toUpperCase() === 'DNC') return { value: false, reason: 'dnc' };
   if ((lead?.closed || '').trim().toLowerCase() === 'yes') return { value: false, reason: 'closed' };
 
-  const sheetFlaggedNeedsResponse = parseSheetFlag(lead?.needsResponseFlag);
-
-  if (!messages.length) {
-    return sheetFlaggedNeedsResponse
-      ? { value: true, reason: 'sheet_flag_no_messages' }
-      : { value: false, reason: 'no_messages' };
-  }
+  // Never infer badge from sheet flags alone; only use actual message ordering.
+  if (!messages.length) return { value: false, reason: 'no_messages' };
 
   // Badge means: lead spoke last and we have not replied after that.
   // Never allow stale sheet flags to override this once message history is present.
