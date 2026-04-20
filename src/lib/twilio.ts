@@ -41,10 +41,16 @@ export async function listMessagesForNumber(phone: string, limit = 100): Promise
     .sort((a, b) => new Date(a.dateCreated).getTime() - new Date(b.dateCreated).getTime());
 }
 
-export async function listRecentMessages(limit = 200): Promise<MessageItem[]> {
+export async function listRecentMessages(): Promise<MessageItem[]> {
   const client = getTwilioClient();
   const twilioNumber = getTwilioPhoneNumber();
-  const messages = await client.messages.list({ limit });
+
+  const limit = parseInt(process.env.TWILIO_RECENT_FETCH_LIMIT ?? '1000', 10);
+  const lookbackDays = parseInt(process.env.TWILIO_RECENT_LOOKBACK_DAYS ?? '90', 10);
+  const dateSentAfter = new Date();
+  dateSentAfter.setDate(dateSentAfter.getDate() - lookbackDays);
+
+  const messages = await client.messages.list({ limit, dateSentAfter });
 
   return messages
     .filter((message) => normalizePhone(message.from) === twilioNumber || normalizePhone(message.to) === twilioNumber)
