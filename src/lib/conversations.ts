@@ -11,26 +11,24 @@ function getConversationPhone(message: { from: string; to: string }, twilioNumbe
 
 function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolean {
   if (!messages.length) return false;
+  // DNC and closed leads never need a response
   if ((lead?.responseType || '').trim().toUpperCase() === 'DNC') return false;
   if ((lead?.closed || '').trim().toLowerCase() === 'yes') return false;
 
+  // Find the most recent inbound message
   const lastInboundIndex = [...messages].reverse().findIndex((message) => message.direction === 'inbound');
   if (lastInboundIndex === -1) return false;
 
   const inboundMessage = messages[messages.length - 1 - lastInboundIndex];
   const inboundAt = new Date(inboundMessage.dateCreated).getTime();
-  const outboundBeforeInbound = messages.filter(
-    (message) => message.direction === 'outbound' && new Date(message.dateCreated).getTime() < inboundAt,
-  ).length;
 
-  if (outboundBeforeInbound < 3) return false;
-
+  // needsResponse = true only when there is NO outbound reply after the last inbound
   const hasOutboundAfterInbound = messages.some(
     (message) => message.direction === 'outbound' && new Date(message.dateCreated).getTime() > inboundAt,
   );
-
   if (hasOutboundAfterInbound) return false;
 
+  // If the lead was manually marked as handled after the inbound timestamp, skip it
   const handledAt = lead?.handledAfterMsg2At ? new Date(lead.handledAfterMsg2At).getTime() : 0;
   if (handledAt && handledAt >= inboundAt) return false;
 
@@ -38,22 +36,15 @@ function getNeedsResponse(messages: MessageItem[], lead: LeadRow | null): boolea
 }
 
 function getWorkflowStatus(lead: LeadRow | null): LeadWorkflowStatus {
-  // Check DNC first - case insensitive
-  if (lead?.responseType && (lead.responseType.trim().toUpperCase() === 'DNC')) {
+  if (lead?.responseType && lead.responseType.trim().toUpperCase() === 'DNC') {
     return 'dnc';
   }
-  
-  // Check closed status - case insensitive
-  if (lead?.closed && (lead.closed.trim().toLowerCase() === 'yes')) {
+  if (lead?.closed && lead.closed.trim().toLowerCase() === 'yes') {
     return 'closed';
   }
-  
-  // Check for follow-up
   if (lead?.nextFollowUpAt) {
     return 'follow-up';
   }
-  
-  // Default to active
   return 'active';
 }
 
@@ -80,7 +71,7 @@ function toConversationSummary(phone: string, messages: MessageItem[], lead: Lea
 }
 
 export async function getConversationSummaries(): Promise<ConversationSummary[]> {
-  const [recentMessages, leads] = await Promise.all([listRecentMessages(200), getLeads()]);
+  const [recentMessages, leads] = await Promise.all([listRecentMessages(), getLeads()]);
   const twilioNumber = normalizePhone(process.env.TWILIO_PHONE_NUMBER ?? '');
   const leadMap = new Map<string, LeadRow>();
 
