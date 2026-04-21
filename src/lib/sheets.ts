@@ -7,7 +7,7 @@ const ARCHIVED_MARKER = 'archived';
 const FOLLOW_UP_MARKER = 'next_follow_up';
 const DNC_MARKER = 'dnc';
 const DASHBOARD_METADATA_HEADER = 'Dashboard Metadata';
-const SHEET_NAME = 'Sheet1';
+const SHEET_NAME = 'Leads';
 
 function getEnv(name: string): string {
   const value = process.env[name];
