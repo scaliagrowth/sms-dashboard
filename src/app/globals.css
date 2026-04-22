@@ -702,3 +702,34 @@ button, textarea, select, input {
     border-color: rgba(59, 130, 246, 0.6);
   }
 }
+
+/* Preset message buttons */
+.presetButtons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.presetBtn {
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(126, 179, 255, 0.35);
+  background: rgba(59, 130, 246, 0.1);
+  color: #7eb3ff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.presetBtn:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: rgba(126, 179, 255, 0.6);
+  color: #fff;
+}
+
+.presetBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
