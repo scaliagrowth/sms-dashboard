@@ -77,11 +77,9 @@ export function InboxLayout() {
   }, [selectedPhone]);
 
   async function refreshSelectedConversation(phone?: string) {
-    // If a specific phone is provided, only refresh that conversation
     if (phone) {
       await loadConversation(phone);
     } else {
-      // Otherwise, refresh everything
       await loadConversations();
       if (selectedPhone) {
         await loadConversation(selectedPhone);
@@ -89,7 +87,6 @@ export function InboxLayout() {
     }
   }
 
-  // Force refresh all data when needed
   async function forceRefreshAll() {
     await loadConversations();
     if (selectedPhone) {
@@ -138,7 +135,12 @@ export function InboxLayout() {
               </div>
             ) : null}
             <ChatThread detail={detail} loading={loadingDetail} />
-            <ReplyBox phone={selectedPhone} onSent={refreshSelectedConversation} disabled={detail?.conversation.workflowStatus === 'dnc'} />
+            <ReplyBox
+              phone={selectedPhone}
+              niche={detail?.lead?.niche}
+              onSent={refreshSelectedConversation}
+              disabled={detail?.conversation.workflowStatus === 'dnc'}
+            />
             {isMobile ? <LeadDetailsPanel detail={detail} onUpdated={refreshSelectedConversation} /> : null}
           </div>
         ) : null}
