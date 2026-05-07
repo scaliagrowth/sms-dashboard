@@ -21,7 +21,7 @@ export function ReplyBox({ phone, niche, onSent, disabled = false }: Props) {
     },
     {
       label: 'Message 3',
-      text: `We run Meta ads that bring in booked appointments and we're doing a free 7 day trial right now where you just cover the ad spend and we handle everything else. Would you be open to a quick call to see if it makes sense for you? if not interested say stop`,
+      text: `Okay awesome. We run meta ads for detailers that bring in booked appointments and recently got a client 6 leads in 3 days at $6.77 a lead. We're offering a free 7 day trial right now where you just cover the ad spend and we handle everything. Would you be open to a quick call to see if it makes sense? If not say stop`,
     },
   ];
 
