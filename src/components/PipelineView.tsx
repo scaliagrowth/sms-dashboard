@@ -3,12 +3,14 @@
 import { useEffect, useState } from 'react';
 
 type Stage = 'needs-call' | 'meeting-booked' | 'closed-dead';
+type Source = 'SMS' | 'Instagram DM' | 'Cold Call';
 
 interface Lead {
   id: string;
   name: string;
   business: string;
-  source: 'SMS' | 'Instagram DM';
+  phone?: string;
+  source: Source;
   notes: string;
   stage: Stage;
   meetingDate?: string;
@@ -77,10 +79,18 @@ function fmtMeeting(lead: Lead) {
   return parts.length ? parts.join(' at ') : null;
 }
 
+function sourceBadgeClass(source: Source) {
+  if (source === 'SMS') return 'plSourceBadge--sms';
+  if (source === 'Instagram DM') return 'plSourceBadge--ig';
+  return 'plSourceBadge--call';
+}
+
+/* ─── Add Lead Modal ─── */
 function AddLeadModal({ onAdd, onClose }: { onAdd: (l: Lead) => void; onClose: () => void }) {
   const [name, setName] = useState('');
   const [business, setBusiness] = useState('');
-  const [source, setSource] = useState<'SMS' | 'Instagram DM'>('SMS');
+  const [phone, setPhone] = useState('');
+  const [source, setSource] = useState<Source>('SMS');
   const [stage, setStage] = useState<Stage>('needs-call');
   const [notes, setNotes] = useState('');
   const [meetingDate, setMeetingDate] = useState('');
@@ -90,7 +100,9 @@ function AddLeadModal({ onAdd, onClose }: { onAdd: (l: Lead) => void; onClose: (
   function submit() {
     if (!name.trim() || !business.trim()) return;
     onAdd({
-      id: uid(), name: name.trim(), business: business.trim(), source, notes: notes.trim(), stage,
+      id: uid(), name: name.trim(), business: business.trim(),
+      phone: phone.trim() || undefined,
+      source, notes: notes.trim(), stage,
       meetingDate: stage === 'meeting-booked' ? meetingDate : undefined,
       meetingHour: stage === 'meeting-booked' ? meetingHour : undefined,
       meetingMinute: stage === 'meeting-booked' ? meetingMinute : undefined,
@@ -114,12 +126,17 @@ function AddLeadModal({ onAdd, onClose }: { onAdd: (l: Lead) => void; onClose: (
           <label className="plLabel">Business *</label>
           <input className="plInput" value={business} onChange={e => setBusiness(e.target.value)} placeholder="Smith's Auto Detail" />
         </div>
+        <div className="plField">
+          <label className="plLabel">Phone (optional)</label>
+          <input className="plInput" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+1 (555) 000-0000" />
+        </div>
         <div className="plRow">
           <div className="plField">
             <label className="plLabel">Source</label>
-            <select className="plSelect" value={source} onChange={e => setSource(e.target.value as 'SMS' | 'Instagram DM')}>
+            <select className="plSelect" value={source} onChange={e => setSource(e.target.value as Source)}>
               <option value="SMS">SMS</option>
               <option value="Instagram DM">Instagram DM</option>
+              <option value="Cold Call">Cold Call</option>
             </select>
           </div>
           <div className="plField">
@@ -156,11 +173,13 @@ function AddLeadModal({ onAdd, onClose }: { onAdd: (l: Lead) => void; onClose: (
   );
 }
 
+/* ─── Lead Profile ─── */
 function LeadProfile({
-  lead, onBack, onUpdate, onMove, onDelete,
+  lead, onBack, onUpdate, onMove, onDelete, onGoToSMS,
 }: {
   lead: Lead; onBack: () => void; onUpdate: (l: Lead) => void;
   onMove: (id: string, stage: Stage) => void; onDelete: (id: string) => void;
+  onGoToSMS: (phone: string) => void;
 }) {
   const [notes, setNotes] = useState(lead.notes);
   const [meetingDate, setMeetingDate] = useState(lead.meetingDate || '');
@@ -186,14 +205,25 @@ function LeadProfile({
           <div>
             <div className="plProfileName">{lead.name}</div>
             <div className="plProfileBusiness">{lead.business}</div>
+            {lead.phone && <div className="plProfilePhone">{lead.phone}</div>}
           </div>
           <div className="plProfileBadges">
-            <span className={`plSourceBadge plSourceBadge--${lead.source === 'SMS' ? 'sms' : 'ig'}`}>{lead.source}</span>
+            <span className={`plSourceBadge ${sourceBadgeClass(lead.source)}`}>{lead.source}</span>
             <span className="plStagePill" style={{ background: stageInfo.color + '22', color: stageInfo.color, border: `1px solid ${stageInfo.color}44` }}>
               {stageInfo.label}
             </span>
           </div>
         </div>
+
+        {/* SMS link button */}
+        {lead.source === 'SMS' && lead.phone && (
+          <div className="plProfileSection">
+            <button className="plSmsBtn" onClick={() => onGoToSMS(lead.phone!)}>
+              💬 View SMS conversation
+            </button>
+          </div>
+        )}
+
         {lead.stage === 'meeting-booked' && (
           <div className="plProfileSection">
             <div className="plSectionLabel">Meeting date &amp; time</div>
@@ -208,10 +238,12 @@ function LeadProfile({
             </div>
           </div>
         )}
+
         <div className="plProfileSection">
           <div className="plSectionLabel">Notes</div>
           <textarea className="plTextarea plProfileNotes" value={notes} onChange={e => setNotes(e.target.value)} onBlur={saveNotes} placeholder="Add notes about this lead..." rows={10} />
         </div>
+
         {nextStage && moveLabel && (
           <div className="plProfileSection">
             <button className="plMoveBtn plMoveBtnLarge" onClick={() => { onMove(lead.id, nextStage); onBack(); }}>
@@ -224,12 +256,14 @@ function LeadProfile({
   );
 }
 
+/* ─── Lead Card ─── */
 function LeadCard({
-  lead, onMove, onDelete, onUpdateNotes, onOpenProfile, isDragging, onDragStart,
+  lead, onMove, onDelete, onUpdateNotes, onOpenProfile, isDragging, onDragStart, onGoToSMS,
 }: {
   lead: Lead; onMove: (id: string, stage: Stage) => void; onDelete: (id: string) => void;
   onUpdateNotes: (id: string, notes: string) => void; onOpenProfile: (lead: Lead) => void;
   isDragging: boolean; onDragStart: (e: React.DragEvent, id: string) => void;
+  onGoToSMS: (phone: string) => void;
 }) {
   const [notes, setNotes] = useState(lead.notes);
   const nextStage = NEXT_STAGE[lead.stage];
@@ -243,9 +277,21 @@ function LeadCard({
           <div className="plCardName">{lead.name}</div>
           <div className="plCardBusiness">{lead.business}</div>
         </div>
-        <span className={`plSourceBadge plSourceBadge--${lead.source === 'SMS' ? 'sms' : 'ig'}`}>{lead.source}</span>
+        <span className={`plSourceBadge ${sourceBadgeClass(lead.source)}`}>{lead.source}</span>
       </div>
+
       {meeting && <div className="plMeetingChip">📅 {meeting}</div>}
+
+      {/* SMS link on card */}
+      {lead.source === 'SMS' && lead.phone && (
+        <button
+          className="plCardSmsBtn"
+          onClick={e => { e.stopPropagation(); onGoToSMS(lead.phone!); }}
+        >
+          💬 Open SMS convo
+        </button>
+      )}
+
       <textarea
         className="plNotesArea"
         value={notes}
@@ -255,6 +301,7 @@ function LeadCard({
         placeholder="Add notes..."
         rows={2}
       />
+
       <div className="plCardActions">
         {nextStage && moveLabel && (
           <button className="plMoveBtn" onClick={e => { e.stopPropagation(); onMove(lead.id, nextStage); }}>
@@ -269,7 +316,8 @@ function LeadCard({
   );
 }
 
-export function PipelineView() {
+/* ─── Pipeline View ─── */
+export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => void }) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [profileLead, setProfileLead] = useState<Lead | null>(null);
@@ -284,6 +332,8 @@ export function PipelineView() {
   function handleDelete(id: string) { update(leads.filter(l => l.id !== id)); }
   function handleUpdateNotes(id: string, notes: string) { update(leads.map(l => l.id === id ? { ...l, notes } : l)); }
   function handleUpdateLead(updated: Lead) { update(leads.map(l => l.id === updated.id ? updated : l)); setProfileLead(updated); }
+
+  function goToSMS(phone: string) { onGoToSMS?.(phone); }
 
   function onDragStart(e: React.DragEvent, id: string) { setDraggingId(id); e.dataTransfer.effectAllowed = 'move'; }
   function onDragOver(e: React.DragEvent, stage: Stage) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverStage(stage); }
@@ -306,7 +356,11 @@ export function PipelineView() {
     return (
       <>
         <style>{css}</style>
-        <LeadProfile lead={live} onBack={() => setProfileLead(null)} onUpdate={handleUpdateLead} onMove={handleMove} onDelete={handleDelete} />
+        <LeadProfile
+          lead={live} onBack={() => setProfileLead(null)}
+          onUpdate={handleUpdateLead} onMove={handleMove}
+          onDelete={handleDelete} onGoToSMS={goToSMS}
+        />
       </>
     );
   }
@@ -341,9 +395,12 @@ export function PipelineView() {
                   {stageLeads.length === 0
                     ? <div className="plEmpty">Drop leads here</div>
                     : stageLeads.map(lead => (
-                      <LeadCard key={lead.id} lead={lead} onMove={handleMove} onDelete={handleDelete}
-                        onUpdateNotes={handleUpdateNotes} onOpenProfile={setProfileLead}
-                        isDragging={draggingId === lead.id} onDragStart={onDragStart} />
+                      <LeadCard
+                        key={lead.id} lead={lead} onMove={handleMove}
+                        onDelete={handleDelete} onUpdateNotes={handleUpdateNotes}
+                        onOpenProfile={setProfileLead} isDragging={draggingId === lead.id}
+                        onDragStart={onDragStart} onGoToSMS={goToSMS}
+                      />
                     ))}
                 </div>
               </div>
@@ -382,33 +439,39 @@ const css = `
 .plCardName { font-size: 13px; font-weight: 600; color: #d4d4d3; line-height: 1.3; }
 .plCardBusiness { font-size: 12px; color: #7a7a8a; margin-top: 2px; }
 .plSourceBadge { font-size: 10px; font-weight: 600; border-radius: 5px; padding: 2px 8px; white-space: nowrap; flex-shrink: 0; }
-.plSourceBadge--sms { background: rgba(96,165,250,0.15); color: #93c5fd; border: 1px solid rgba(96,165,250,0.25); }
-.plSourceBadge--ig  { background: rgba(167,139,250,0.15); color: #c4b5fd; border: 1px solid rgba(167,139,250,0.25); }
+.plSourceBadge--sms  { background: rgba(96,165,250,0.15); color: #93c5fd; border: 1px solid rgba(96,165,250,0.25); }
+.plSourceBadge--ig   { background: rgba(167,139,250,0.15); color: #c4b5fd; border: 1px solid rgba(167,139,250,0.25); }
+.plSourceBadge--call { background: rgba(34,197,94,0.12); color: #86efac; border: 1px solid rgba(34,197,94,0.22); }
 .plMeetingChip { font-size: 11px; color: #93c5fd; margin-bottom: 8px; background: rgba(96,165,250,0.08); border-radius: 5px; padding: 4px 8px; }
+.plCardSmsBtn { width: 100%; margin-bottom: 8px; padding: 5px 10px; font-size: 11px; font-weight: 600; background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.22); border-radius: 6px; color: #93c5fd; cursor: pointer; font-family: inherit; text-align: left; }
+.plCardSmsBtn:hover { background: rgba(96,165,250,0.2); }
 .plNotesArea { width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 6px; color: #d4d4d3; font-size: 12px; font-family: inherit; padding: 6px 8px; resize: vertical; margin-bottom: 8px; line-height: 1.5; }
 .plNotesArea::placeholder { color: rgba(255,255,255,0.2); }
 .plNotesArea:focus { outline: none; border-color: rgba(139,92,246,0.4); }
 .plCardActions { display: flex; align-items: center; justify-content: space-between; }
 .plMoveBtn { font-size: 11px; font-weight: 600; color: #c4b5fd; background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.25); border-radius: 6px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
 .plMoveBtn:hover { background: rgba(139,92,246,0.22); }
-.plMoveBtnLarge { width: 100%; padding: 12px; font-size: 14px; border-radius: 10px; text-align: center; }
+.plMoveBtnLarge { width: 100%; padding: 12px; font-size: 14px; border-radius: 10px; text-align: center; font-family: inherit; }
 .plDeleteCardBtn { font-size: 11px; color: rgba(255,255,255,0.25); background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: 4px; }
 .plDeleteCardBtn:hover { color: #f87171; background: rgba(248,113,113,0.1); }
 .plProfile { padding: 20px; min-height: 100%; }
 .plProfileTopBar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-.plBackBtn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #d4d4d3; border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 500; cursor: pointer; }
+.plBackBtn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #d4d4d3; border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; }
 .plBackBtn:hover { background: rgba(255,255,255,0.09); }
-.plDeleteBtn { background: none; border: 1px solid rgba(248,113,113,0.25); color: #f87171; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
+.plDeleteBtn { background: none; border: 1px solid rgba(248,113,113,0.25); color: #f87171; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; font-family: inherit; }
 .plDeleteBtn:hover { background: rgba(248,113,113,0.1); }
 .plProfileCard { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 28px; max-width: 700px; }
-.plProfileHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 28px; padding-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+.plProfileHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.07); }
 .plProfileName { font-size: 24px; font-weight: 700; color: #e8e8e7; line-height: 1.2; }
 .plProfileBusiness { font-size: 15px; color: #7a7a8a; margin-top: 5px; }
+.plProfilePhone { font-size: 13px; color: #7a7a8a; margin-top: 3px; }
 .plProfileBadges { display: flex; gap: 8px; align-items: center; flex-shrink: 0; flex-wrap: wrap; }
 .plStagePill { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 4px 12px; white-space: nowrap; }
-.plProfileSection { margin-bottom: 22px; }
+.plProfileSection { margin-bottom: 20px; }
 .plSectionLabel { font-size: 11px; font-weight: 700; color: #7a7a8a; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; }
 .plProfileNotes { width: 100%; box-sizing: border-box; font-size: 14px; line-height: 1.7; }
+.plSmsBtn { width: 100%; padding: 10px 14px; font-size: 13px; font-weight: 600; background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.25); border-radius: 10px; color: #93c5fd; cursor: pointer; font-family: inherit; text-align: left; }
+.plSmsBtn:hover { background: rgba(96,165,250,0.18); }
 .plOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
 .plModal { background: #14141c; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 24px; width: 100%; max-width: 460px; max-height: 90vh; overflow-y: auto; }
 .plModalHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
@@ -423,13 +486,13 @@ const css = `
 .plSelect option { background: #14141c; }
 .plTextarea { resize: vertical; }
 .plTimeRow { display: flex; gap: 8px; align-items: center; }
-.plDateInput  { flex: 2; }
+.plDateInput { flex: 2; }
 .plTimeSelect { flex: 1.2; }
-.plMinSelect  { flex: 0.9; }
+.plMinSelect { flex: 0.9; }
 .plModalActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-.plBtnPrimary { background: linear-gradient(90deg, #8b5cf6 0%, #60a5fa 100%); color: #fff; border: none; border-radius: 8px; padding: 9px 20px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 14px rgba(139,92,246,0.3); }
+.plBtnPrimary { background: linear-gradient(90deg, #8b5cf6 0%, #60a5fa 100%); color: #fff; border: none; border-radius: 8px; padding: 9px 20px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 14px rgba(139,92,246,0.3); font-family: inherit; }
 .plBtnPrimary:hover:not(:disabled) { opacity: 0.9; }
 .plBtnPrimary:disabled { opacity: 0.4; cursor: not-allowed; }
-.plBtnSecondary { background: rgba(255,255,255,0.05); color: #7a7a8a; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 9px 20px; font-size: 13px; cursor: pointer; }
+.plBtnSecondary { background: rgba(255,255,255,0.05); color: #7a7a8a; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 9px 20px; font-size: 13px; cursor: pointer; font-family: inherit; }
 .plBtnSecondary:hover { background: rgba(255,255,255,0.09); }
 `;
