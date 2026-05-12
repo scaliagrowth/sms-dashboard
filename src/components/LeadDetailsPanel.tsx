@@ -3,26 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatPhoneDisplay } from '@/lib/phone';
 import type { ConversationDetail, LeadUpdateInput } from '@/lib/types';
-import { StatusBadge } from './StatusBadge';
 
 type Props = {
   detail: ConversationDetail | null;
   onUpdated?: () => Promise<void>;
 };
-
-function toDatetimeLocalValue(value: string | null | undefined) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const offset = date.getTimezoneOffset();
-  const local = new Date(date.getTime() - offset * 60_000);
-  return local.toISOString().slice(0, 16);
-}
-
-function getSelectOptions(currentValue: string) {
-  const base = ['', 'Yes'];
-  return currentValue && !base.includes(currentValue) ? [currentValue, ...base] : base;
-}
 
 export function LeadDetailsPanel({ detail, onUpdated }: Props) {
   const [form, setForm] = useState<LeadUpdateInput>({
@@ -54,7 +39,7 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
       showed: detail?.lead?.showed || '',
       closed: detail?.lead?.closed || '',
       notes: detail?.lead?.notes || '',
-      nextFollowUpAt: toDatetimeLocalValue(detail?.lead?.nextFollowUpAt),
+      nextFollowUpAt: '',
       markDnc: detail?.lead?.responseType === 'DNC',
       removeDnc: false,
     });
@@ -70,21 +55,16 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
   }, [detail?.conversation.workflowStatus]);
 
   if (!detail) {
-    return <aside className="detailsPanel emptyState">Lead details will appear here.</aside>;
+    return <aside className="detailsPanel emptyState">Select a conversation to see lead details.</aside>;
   }
-
-  const lead = detail.lead;
 
   async function handleSave(overrides?: Partial<LeadUpdateInput>, successMessage?: string) {
     if (!detail) return;
-
     const nextForm = { ...form, ...overrides };
-
     try {
       setSaving(true);
       setSaveError(null);
       setSaveMessage(null);
-
       const response = await fetch('/api/leads/update-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -95,152 +75,226 @@ export function LeadDetailsPanel({ detail, onUpdated }: Props) {
           nextFollowUpAt: nextForm.nextFollowUpAt ? new Date(nextForm.nextFollowUpAt).toISOString() : '',
         }),
       });
-
-      console.log('DNC Removal Response:', response);
-      
-      // Parse the response to get updated data
       const result = await response.json();
-      
-      // Update local form state with the new values from the server
       if (result.success && result.updatedLead) {
-        const updatedLead = result.updatedLead;
-        setForm({
-          ...nextForm,
-          responseType: updatedLead.responseType,
-        });
+        setForm({ ...nextForm, responseType: result.updatedLead.responseType });
       }
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to update lead details.');
-      }
-
+      if (!response.ok) throw new Error(result.error || 'Failed to update.');
       setForm(nextForm);
-      setSaveMessage(successMessage || (nextForm.markDnc ? 'Marked as DNC and archived.' : 'Saved'));
+      setSaveMessage(successMessage || (nextForm.markDnc ? 'Marked as DNC.' : 'Saved'));
       if (onUpdated) {
-        // For DNC changes, force a full refresh to ensure workflow status updates
         if (nextForm.markDnc || nextForm.removeDnc) {
-          // Force refresh all data when DNC status changes
           window.location.reload();
         } else {
           await onUpdated();
         }
       }
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'Failed to update lead details.');
+      setSaveError(error instanceof Error ? error.message : 'Failed to update.');
     } finally {
       setSaving(false);
     }
   }
 
-  const settingCallOptions = getSelectOptions(form.settingCallBooked);
-  const zoomOptions = getSelectOptions(form.zoomBooked);
-  const showedOptions = getSelectOptions(form.showed);
-  const closedOptions = getSelectOptions(form.closed);
-
   return (
     <aside className="detailsPanel">
-      <div className="panelSectionHeader">
-        <div>
-          <h3>Lead Details</h3>
-          <p className="sectionHint">Everything here saves to the sheet.</p>
-        </div>
+      <style>{`
+        .ldp-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 16px;
+        }
+        .ldp-title {
+          font-size: 15px;
+          font-weight: 700;
+          color: #e8e8e7;
+          margin: 0;
+        }
+        .ldp-meta {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          padding: 12px 14px;
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.07);
+          border-radius: 12px;
+          margin-bottom: 14px;
+        }
+        .ldp-meta-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-size: 13px;
+        }
+        .ldp-meta-label { color: #7a7a8a; }
+        .ldp-meta-value { font-weight: 600; color: #d4d4d3; }
+        .ldp-card {
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.07);
+          border-radius: 14px;
+          padding: 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .ldp-card-title {
+          font-size: 13px;
+          font-weight: 700;
+          color: #7a7a8a;
+          text-transform: uppercase;
+          letter-spacing: 0.07em;
+          margin: 0 0 4px;
+        }
+        .ldp-field {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+        }
+        .ldp-field label {
+          font-size: 11px;
+          font-weight: 700;
+          color: #7a7a8a;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+        }
+        .ldp-field input {
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 8px;
+          color: #d4d4d3;
+          font-size: 13px;
+          font-family: inherit;
+          padding: 9px 11px;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        .ldp-field input:focus {
+          outline: none;
+          border-color: rgba(139,92,246,0.5);
+        }
+        .ldp-actions {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding-top: 4px;
+        }
+        .ldp-btn {
+          width: 100%;
+          padding: 11px;
+          border: none;
+          border-radius: 10px;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          font-family: inherit;
+          transition: opacity 0.15s;
+        }
+        .ldp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .ldp-btn:hover:not(:disabled) { opacity: 0.88; }
+        .ldp-btn-save {
+          background: linear-gradient(90deg, #8b5cf6 0%, #60a5fa 100%);
+          color: #fff;
+          box-shadow: 0 4px 14px rgba(139,92,246,0.28);
+        }
+        .ldp-btn-hot {
+          background: linear-gradient(90deg, #16a34a 0%, #22c55e 100%);
+          color: #fff;
+        }
+        .ldp-btn-dnc {
+          background: linear-gradient(90deg, #ef4444 0%, #f97316 100%);
+          color: #fff;
+        }
+        .ldp-btn-undnc {
+          background: linear-gradient(90deg, #f59e0b 0%, #f97316 100%);
+          color: #fff;
+        }
+        .ldp-msg-success {
+          font-size: 12px;
+          color: #86efac;
+          font-weight: 600;
+          text-align: center;
+        }
+        .ldp-msg-error {
+          font-size: 12px;
+          color: #f87171;
+          text-align: center;
+        }
+      `}</style>
+
+      <div className="ldp-header">
+        <h3 className="ldp-title">Lead Details</h3>
         <span className={`statusPill ${detail.conversation.workflowStatus}`}>{workflowLabel}</span>
       </div>
 
-      <div className="detailGroup">
-        <div className="detailRow"><span>Phone</span><strong>{formatPhoneDisplay(detail.conversation.phone)}</strong></div>
-        <div className="detailRow"><span>Needs reply</span><strong>{detail.conversation.needsResponse ? 'Yes' : 'No'}</strong></div>
+      <div className="ldp-meta">
+        <div className="ldp-meta-row">
+          <span className="ldp-meta-label">Phone</span>
+          <span className="ldp-meta-value">{formatPhoneDisplay(detail.conversation.phone)}</span>
+        </div>
+        <div className="ldp-meta-row">
+          <span className="ldp-meta-label">Needs reply</span>
+          <span className="ldp-meta-value">{detail.conversation.needsResponse ? 'Yes' : 'No'}</span>
+        </div>
       </div>
 
-      <div className="statusEditorCard">
-        <h4>Quick Update</h4>
+      <div className="ldp-card">
+        <p className="ldp-card-title">Quick Update</p>
 
-        <label className="editorField">
-          <span>Business name</span>
-          <input value={form.businessName} onChange={(event) => setForm((current) => ({ ...current, businessName: event.target.value }))} />
-        </label>
-
-        <label className="editorField">
-          <span>Niche</span>
-          <input value={form.niche} onChange={(event) => setForm((current) => ({ ...current, niche: event.target.value }))} />
-        </label>
-
-        <label className="editorField">
-          <span>Response type</span>
-          <select value={form.responseType} onChange={(event) => setForm((current) => ({ ...current, responseType: event.target.value, markDnc: false }))} disabled={form.markDnc}>
-            <option value="">Blank</option>
-            <option value="Highly interested">Highly interested</option>
-            <option value="Interested">Interested</option>
-            <option value="More info">More info</option>
-            <option value="Not interested">Not interested</option>
-          </select>
-        </label>
-
-        <div className="editorGridTwo">
-          <label className="editorField">
-            <span>Setting call</span>
-            <select value={form.settingCallBooked} onChange={(event) => setForm((current) => ({ ...current, settingCallBooked: event.target.value }))}>
-              {settingCallOptions.map((value) => <option key={value || 'blank'} value={value}>{value || 'Blank'}</option>)}
-            </select>
-          </label>
-
-          <label className="editorField">
-            <span>Zoom booked</span>
-            <select value={form.zoomBooked} onChange={(event) => setForm((current) => ({ ...current, zoomBooked: event.target.value }))}>
-              {zoomOptions.map((value) => <option key={value || 'blank'} value={value}>{value || 'Blank'}</option>)}
-            </select>
-          </label>
-
-          <label className="editorField">
-            <span>Showed</span>
-            <select value={form.showed} onChange={(event) => setForm((current) => ({ ...current, showed: event.target.value }))}>
-              {showedOptions.map((value) => <option key={value || 'blank'} value={value}>{value || 'Blank'}</option>)}
-            </select>
-          </label>
-
-          <label className="editorField">
-            <span>Closed</span>
-            <select value={form.closed} onChange={(event) => setForm((current) => ({ ...current, closed: event.target.value, markDnc: false }))} disabled={form.markDnc}>
-              {closedOptions.map((value) => <option key={value || 'blank'} value={value}>{value || 'Blank'}</option>)}
-            </select>
-          </label>
+        <div className="ldp-field">
+          <label>Business name</label>
+          <input
+            value={form.businessName}
+            onChange={e => setForm(f => ({ ...f, businessName: e.target.value }))}
+          />
         </div>
 
-        <label className="editorField">
-          <span>Next follow-up</span>
-          <input type="datetime-local" value={form.nextFollowUpAt} onChange={(event) => setForm((current) => ({ ...current, nextFollowUpAt: event.target.value, markDnc: false }))} disabled={form.markDnc} />
-        </label>
+        <div className="ldp-field">
+          <label>Niche</label>
+          <input
+            value={form.niche}
+            onChange={e => setForm(f => ({ ...f, niche: e.target.value }))}
+          />
+        </div>
 
-        <label className="editorField">
-          <span>Notes</span>
-          <textarea value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} rows={5} />
-        </label>
+        <div className="ldp-actions">
+          <button
+            className="ldp-btn ldp-btn-save"
+            onClick={() => handleSave({ markDnc: false })}
+            disabled={saving}
+          >
+            {saving ? 'Saving…' : 'Save changes'}
+          </button>
 
-        <div className="editorActions">
-          <button onClick={() => handleSave({ markDnc: false })} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
-          <button className="successButton" onClick={() => handleSave({ markDnc: false, responseType: 'Highly interested' }, 'Marked as highly interested.')} disabled={saving}>Highly interested</button>
-          {detail?.conversation.workflowStatus === 'dnc' ? (
-            <button className="warningButton" onClick={() => handleSave({ removeDnc: true, responseType: 'Not interested', closed: '', nextFollowUpAt: '' }, 'Removed from DNC - can now text manually.')} disabled={saving}>Remove from DNC</button>
+          <button
+            className="ldp-btn ldp-btn-hot"
+            onClick={() => handleSave({ markDnc: false, responseType: 'Highly interested' }, 'Marked as highly interested.')}
+            disabled={saving}
+          >
+            Highly interested
+          </button>
+
+          {detail.conversation.workflowStatus === 'dnc' ? (
+            <button
+              className="ldp-btn ldp-btn-undnc"
+              onClick={() => handleSave({ removeDnc: true, responseType: 'Not interested', closed: '', nextFollowUpAt: '' }, 'Removed from DNC.')}
+              disabled={saving}
+            >
+              Remove from DNC
+            </button>
           ) : (
-            <button className="dangerButton" onClick={() => handleSave({ markDnc: true, responseType: '', closed: '', nextFollowUpAt: '' })} disabled={saving}>Mark DNC</button>
+            <button
+              className="ldp-btn ldp-btn-dnc"
+              onClick={() => handleSave({ markDnc: true, responseType: '', closed: '', nextFollowUpAt: '' })}
+              disabled={saving}
+            >
+              Mark DNC
+            </button>
           )}
-          {saveMessage ? <span className="saveSuccess">{saveMessage}</span> : null}
-          {saveError ? <span className="errorText">{saveError}</span> : null}
-        </div>
-      </div>
 
-      <div className="statusGrid">
-        <StatusBadge label="Message 1 Sent" value={lead?.message1Sent} />
-        <StatusBadge label="Replied" value={lead?.replied} />
-        <StatusBadge label="Response Type" value={lead?.responseType} />
-        <StatusBadge label="Message 2 Sent" value={lead?.message2Sent} />
-        <StatusBadge label="Message 3 Sent" value={lead?.message3Sent} />
-        <StatusBadge label="Setting Call" value={lead?.settingCallBooked} />
-        <StatusBadge label="Zoom Booked" value={lead?.zoomBooked} />
-        <StatusBadge label="Showed" value={lead?.showed} />
-        <StatusBadge label="Closed" value={lead?.closed} />
-        <StatusBadge label="Follow Up" value={lead?.nextFollowUpAt ? new Date(lead.nextFollowUpAt).toLocaleString() : ''} />
+          {saveMessage ? <div className="ldp-msg-success">{saveMessage}</div> : null}
+          {saveError ? <div className="ldp-msg-error">{saveError}</div> : null}
+        </div>
       </div>
     </aside>
   );
