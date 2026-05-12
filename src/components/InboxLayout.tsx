@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { ConversationList } from './ConversationList';
 import { ChatThread } from './ChatThread';
 import { LeadDetailsPanel } from './LeadDetailsPanel';
@@ -57,26 +57,19 @@ export function InboxLayout() {
     updateViewport();
     window.addEventListener('resize', updateViewport);
     void loadConversations();
-
     return () => window.removeEventListener('resize', updateViewport);
   }, []);
 
   useEffect(() => {
-    if (selectedPhone) {
-      void loadConversation(selectedPhone);
-    } else {
-      setDetail(null);
-    }
+    if (selectedPhone) void loadConversation(selectedPhone);
+    else setDetail(null);
   }, [selectedPhone]);
 
   useEffect(() => {
     const interval = setInterval(() => {
       void loadConversations();
-      if (selectedPhone) {
-        void loadConversation(selectedPhone);
-      }
+      if (selectedPhone) void loadConversation(selectedPhone);
     }, 30000);
-
     return () => clearInterval(interval);
   }, [selectedPhone]);
 
@@ -85,24 +78,13 @@ export function InboxLayout() {
       await loadConversation(phone);
     } else {
       await loadConversations();
-      if (selectedPhone) {
-        await loadConversation(selectedPhone);
-      }
-    }
-  }
-
-  async function forceRefreshAll() {
-    await loadConversations();
-    if (selectedPhone) {
-      await loadConversation(selectedPhone);
+      if (selectedPhone) await loadConversation(selectedPhone);
     }
   }
 
   function handleSelectConversation(phone: string) {
     setSelectedPhone(phone);
-    if (typeof window !== 'undefined' && window.innerWidth <= 760) {
-      setMobileView('thread');
-    }
+    if (typeof window !== 'undefined' && window.innerWidth <= 760) setMobileView('thread');
   }
 
   const showList = !isMobile || mobileView === 'list';
@@ -111,34 +93,54 @@ export function InboxLayout() {
   return (
     <main className="appShell">
       <style>{`
+        .appHeader {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 0;
+          padding-bottom: 0;
+        }
+        .scalia-logo {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          text-decoration: none;
+        }
+        .scalia-wordmark {
+          font-size: 22px;
+          font-weight: 700;
+          color: #e8e8e7;
+          letter-spacing: -0.3px;
+          font-family: Inter, Arial, sans-serif;
+        }
         .tabBar {
           display: flex;
           align-items: center;
           gap: 2px;
-          padding: 0 20px;
-          border-bottom: 1px solid rgba(255,255,255,0.08);
-          background: inherit;
+          padding: 10px 0 0;
+          border-bottom: 1px solid rgba(255,255,255,0.07);
+          margin-bottom: 16px;
+          flex-shrink: 0;
         }
         .tabBtn {
           background: none;
           border: none;
           border-bottom: 2px solid transparent;
-          color: rgba(255,255,255,0.45);
+          color: rgba(255,255,255,0.35);
           font-size: 13px;
-          font-weight: 500;
+          font-weight: 600;
           font-family: inherit;
-          padding: 10px 14px;
+          padding: 8px 16px 10px;
           cursor: pointer;
           margin-bottom: -1px;
           transition: color 0.15s, border-color 0.15s;
           white-space: nowrap;
+          letter-spacing: 0.01em;
         }
-        .tabBtn:hover {
-          color: rgba(255,255,255,0.75);
-        }
+        .tabBtn:hover { color: rgba(255,255,255,0.7); }
         .tabBtn--active {
-          color: #f0f0ef;
-          border-bottom-color: #2a7de1;
+          color: #e8e8e7;
+          border-bottom-color: #8b5cf6;
         }
         .pipelineWrapper {
           flex: 1;
@@ -148,9 +150,21 @@ export function InboxLayout() {
       `}</style>
 
       <header className="appHeader">
-        <div>
-          <h1>{process.env.NEXT_PUBLIC_APP_NAME || 'Messaging Dashboard'}</h1>
-          <p>Twilio + Google Sheets inbox for manual lead replies.</p>
+        <div className="scalia-logo">
+          {/* Scalia logo mark — inline SVG, no image dependency */}
+          <svg width="36" height="36" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <defs>
+              <linearGradient id="scaliaGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#a78bfa" />
+                <stop offset="100%" stopColor="#60a5fa" />
+              </linearGradient>
+            </defs>
+            {/* Dot */}
+            <circle cx="62" cy="62" r="22" fill="url(#scaliaGrad)" />
+            {/* Slash / bar */}
+            <rect x="78" y="78" width="36" height="88" rx="18" transform="rotate(-20 78 78)" fill="url(#scaliaGrad)" />
+          </svg>
+          <span className="scalia-wordmark">Scalia</span>
         </div>
       </header>
 
@@ -183,7 +197,11 @@ export function InboxLayout() {
             loadingList ? (
               <aside className="sidebar emptyState">Loading inbox…</aside>
             ) : (
-              <ConversationList conversations={conversations} selectedPhone={selectedPhone} onSelect={handleSelectConversation} />
+              <ConversationList
+                conversations={conversations}
+                selectedPhone={selectedPhone}
+                onSelect={handleSelectConversation}
+              />
             )
           ) : null}
 
@@ -194,7 +212,9 @@ export function InboxLayout() {
                   <button className="backButton" onClick={() => setMobileView('list')}>
                     ← Back to inbox
                   </button>
-                  {detail?.conversation?.needsResponse ? <span className="needsResponseBadge">Needs response</span> : null}
+                  {detail?.conversation?.needsResponse ? (
+                    <span className="needsResponseBadge">Needs response</span>
+                  ) : null}
                 </div>
               ) : null}
               <ChatThread detail={detail} loading={loadingDetail} />
