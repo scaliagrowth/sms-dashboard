@@ -9,12 +9,12 @@ import { PipelineView } from './PipelineView';
 import { DashboardView } from './DashboardView';
 import type { ConversationDetail, ConversationSummary } from '@/lib/types';
 
-type Tab = 'inbox' | 'pipeline' | 'dashboard';
+type Tab = 'dashboard' | 'inbox' | 'pipeline';
 
 const LOGO_SRC = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAYAAACOEfKtAAAEW0lEQVR42u2Zz2tcVRTHv+e+l6RVUi0WQTAbF4LdKd0ILsRlEf8BFxb/B0Fw1bU7NxbEjd0FFwouRGjJUhBFiYi/6qIRwQZjM4Rx5r37PV8Xc1/yMqbS2snYCecDl8m8N7x77/ede+733ABBEARBEARBEARBEARBEARBEARBEAQPNPYgDEKSHddYzMxPnIBFsAqAzIwRgfcmXjUt2mAwOLe6unoGwCkAaXpcTdNgeXlZ09c6Du41aBpAksrLWVleXt5c9JfUjzoAwO3bt8/mnF8leZXkJskdko3Ldb+4XCRbSWrb9rKkJKk6EeKVybxB8tc7zv/+WyNJLdt3uz4XXrzSzpD8rCdWWyIlS+Kk0Sn1Gg+EIZ2ik901lvv9axpLEsn1Ll30I39RBUySUiY/lSSK4yKYz7g1kpRzvi59u1z6XXjxagAYj8evl6gbT02aktqukcySWqr7VKaUSebuWv+35fe5F3lf7ezsPGJmi790u+W7vr5ekfxmMj/mKQFnBsmf9/b2nph33rPjXLpm5qPR6OmllZXv0sSe7N8ufe8AvAxUv+Scra5rzzkfOaa6rgUA0/fruvbyrK/N7Leu35MQfRUAjEaji5Pcp3xEvnpr1i9t3vOsj+vBGxsbBgBVVZ0GoDSJuo5UjO6Lw+Hwg93d3R13F0mtra1ha2vr0LPWAGwd0cetW7fyhQsX2n7ZdpRRX9QlXJkZ27Z9qa7rawCIw8sYAMzddydLGSYJZQM4PEJZ+VS/xhWAMZD+APwnSdeqqvrIzPZOxDLuLMRgMDhHctB5PfY2EZKc8UZyo23bV06Ege7nQZLvlDn+pcO5sLMy+T5aZ8ibfYfethf7/S96FZK2t7dXSV7vl2yd5ysTb6h9Efa/d8JMf5bW3slMk7wh6VRXBZ2UOngp5/wmye99RhawPGdaxCxJTdO8MI8otHmJWJI+JC01TfNMSukpMzt7L2MgaVVVGQCrqup5By6lA08JAHA4E1JF8rW6rq9Kqs0sn4iqRNLSLJcUpc9Lfb2fV0sqUM75Ur+cXDgfeGS4m7WzetZoNDqfHE8iQQnJDgzm5O+c83av6llsATtfJulxd39f0mPlu00JDEEwHHhBM/vHgayZ1QDOI+FhAF0pB3dHSim5+9jdN+ch4FzEA4A/pUdJfqnZMn0s1pYdfmNeXrCeg3i6efPm6TPuH6eUnnN4k5Cqu4kMdzcASClp+npK6dB/8kr0OYDa3d+e5yZ5rB5QUkXykxIuzawPUstpdNs7yn9v4SuRfr4iebUst2HfKN9NIydm+g5GujPT/VLuSncCvrAGuhd5D+WcP9QxQ3FM8lrbti/3+p+beMeRA83MfDgcPruysjIGcAXw2v0gH6WUuvxkJc9ZSmmS81IylNw3ncdSSnJ3ABgm4HdKP+Sq+uJUZT/2d3sE/ynq/5eDAzvmPDirSelfxuwRdUEQBEEQBEEQBEEQBEEQBEEQBEEQBEEQBEEwe/4GP5r4aLFIaw4AAAAASUVORK5CYII=';
 
 export function InboxLayout() {
-  const [activeTab, setActiveTab] = useState<Tab>('inbox');
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
@@ -90,13 +90,25 @@ export function InboxLayout() {
     if (typeof window !== 'undefined' && window.innerWidth <= 760) setMobileView('thread');
   }
 
+  // Called from Pipeline when user clicks "Open SMS convo"
+  function handleGoToSMS(phone: string) {
+    setSelectedPhone(phone);
+    setActiveTab('inbox');
+    setMobileView('thread');
+  }
+
+  // Called from Dashboard "View →" pipeline link
+  function handleNavigate(tab: string) {
+    setActiveTab(tab as Tab);
+  }
+
   const showList = !isMobile || mobileView === 'list';
   const showThread = !isMobile || mobileView === 'thread';
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'dashboard', label: 'Dashboard' },
-    { id: 'inbox', label: 'Inbox' },
-    { id: 'pipeline', label: 'Pipeline' },
+    { id: 'inbox',     label: 'Inbox' },
+    { id: 'pipeline',  label: 'Pipeline' },
   ];
 
   return (
@@ -106,7 +118,6 @@ export function InboxLayout() {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding-bottom: 0;
           margin-bottom: 0;
           flex-shrink: 0;
         }
@@ -116,10 +127,10 @@ export function InboxLayout() {
           gap: 10px;
         }
         .app-logo img {
-          width: 32px;
-          height: 32px;
+          width: 30px;
+          height: 30px;
           object-fit: contain;
-          filter: drop-shadow(0 0 8px rgba(139,92,246,0.4));
+          filter: drop-shadow(0 0 8px rgba(139,92,246,0.5));
         }
         .app-wordmark {
           font-size: 20px;
@@ -156,12 +167,7 @@ export function InboxLayout() {
           color: #e8e8e7;
           border-bottom-color: #8b5cf6;
         }
-        .pipeline-wrapper {
-          flex: 1;
-          overflow-y: auto;
-          min-height: 0;
-        }
-        .dashboard-wrapper {
+        .scroll-wrapper {
           flex: 1;
           overflow-y: auto;
           min-height: 0;
@@ -191,12 +197,12 @@ export function InboxLayout() {
       {error ? <div className="errorBanner">{error}</div> : null}
 
       {activeTab === 'dashboard' ? (
-        <div className="dashboard-wrapper">
-          <DashboardView conversations={conversations} />
+        <div className="scroll-wrapper">
+          <DashboardView conversations={conversations} onNavigate={handleNavigate} />
         </div>
       ) : activeTab === 'pipeline' ? (
-        <div className="pipeline-wrapper">
-          <PipelineView />
+        <div className="scroll-wrapper">
+          <PipelineView onGoToSMS={handleGoToSMS} />
         </div>
       ) : (
         <div className="dashboardGrid">
