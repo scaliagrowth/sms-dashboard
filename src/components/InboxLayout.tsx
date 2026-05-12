@@ -5,9 +5,13 @@ import { ConversationList } from './ConversationList';
 import { ChatThread } from './ChatThread';
 import { LeadDetailsPanel } from './LeadDetailsPanel';
 import { ReplyBox } from './ReplyBox';
+import { PipelineView } from './PipelineView';
 import type { ConversationDetail, ConversationSummary } from '@/lib/types';
 
+type Tab = 'inbox' | 'pipeline';
+
 export function InboxLayout() {
+  const [activeTab, setActiveTab] = useState<Tab>('inbox');
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
@@ -106,6 +110,43 @@ export function InboxLayout() {
 
   return (
     <main className="appShell">
+      <style>{`
+        .tabBar {
+          display: flex;
+          align-items: center;
+          gap: 2px;
+          padding: 0 20px;
+          border-bottom: 1px solid rgba(255,255,255,0.08);
+          background: inherit;
+        }
+        .tabBtn {
+          background: none;
+          border: none;
+          border-bottom: 2px solid transparent;
+          color: rgba(255,255,255,0.45);
+          font-size: 13px;
+          font-weight: 500;
+          font-family: inherit;
+          padding: 10px 14px;
+          cursor: pointer;
+          margin-bottom: -1px;
+          transition: color 0.15s, border-color 0.15s;
+          white-space: nowrap;
+        }
+        .tabBtn:hover {
+          color: rgba(255,255,255,0.75);
+        }
+        .tabBtn--active {
+          color: #f0f0ef;
+          border-bottom-color: #2a7de1;
+        }
+        .pipelineWrapper {
+          flex: 1;
+          overflow-y: auto;
+          min-height: 0;
+        }
+      `}</style>
+
       <header className="appHeader">
         <div>
           <h1>{process.env.NEXT_PUBLIC_APP_NAME || 'Messaging Dashboard'}</h1>
@@ -113,40 +154,63 @@ export function InboxLayout() {
         </div>
       </header>
 
+      <nav className="tabBar" aria-label="Main navigation">
+        <button
+          className={`tabBtn${activeTab === 'inbox' ? ' tabBtn--active' : ''}`}
+          onClick={() => setActiveTab('inbox')}
+          aria-current={activeTab === 'inbox' ? 'page' : undefined}
+        >
+          Inbox
+        </button>
+        <button
+          className={`tabBtn${activeTab === 'pipeline' ? ' tabBtn--active' : ''}`}
+          onClick={() => setActiveTab('pipeline')}
+          aria-current={activeTab === 'pipeline' ? 'page' : undefined}
+        >
+          Pipeline
+        </button>
+      </nav>
+
       {error ? <div className="errorBanner">{error}</div> : null}
 
-      <div className="dashboardGrid">
-        {showList ? (
-          loadingList ? (
-            <aside className="sidebar emptyState">Loading inbox…</aside>
-          ) : (
-            <ConversationList conversations={conversations} selectedPhone={selectedPhone} onSelect={handleSelectConversation} />
-          )
-        ) : null}
+      {activeTab === 'pipeline' ? (
+        <div className="pipelineWrapper">
+          <PipelineView />
+        </div>
+      ) : (
+        <div className="dashboardGrid">
+          {showList ? (
+            loadingList ? (
+              <aside className="sidebar emptyState">Loading inbox…</aside>
+            ) : (
+              <ConversationList conversations={conversations} selectedPhone={selectedPhone} onSelect={handleSelectConversation} />
+            )
+          ) : null}
 
-        {showThread ? (
-          <div className="centerColumn threadColumnMobile">
-            {isMobile ? (
-              <div className="mobileThreadBar">
-                <button className="backButton" onClick={() => setMobileView('list')}>
-                  ← Back to inbox
-                </button>
-                {detail?.conversation?.needsResponse ? <span className="needsResponseBadge">Needs response</span> : null}
-              </div>
-            ) : null}
-            <ChatThread detail={detail} loading={loadingDetail} />
-            <ReplyBox
-              phone={selectedPhone}
-              niche={detail?.lead?.niche}
-              onSent={refreshSelectedConversation}
-              disabled={detail?.conversation.workflowStatus === 'dnc'}
-            />
-            {isMobile ? <LeadDetailsPanel detail={detail} onUpdated={refreshSelectedConversation} /> : null}
-          </div>
-        ) : null}
+          {showThread ? (
+            <div className="centerColumn threadColumnMobile">
+              {isMobile ? (
+                <div className="mobileThreadBar">
+                  <button className="backButton" onClick={() => setMobileView('list')}>
+                    ← Back to inbox
+                  </button>
+                  {detail?.conversation?.needsResponse ? <span className="needsResponseBadge">Needs response</span> : null}
+                </div>
+              ) : null}
+              <ChatThread detail={detail} loading={loadingDetail} />
+              <ReplyBox
+                phone={selectedPhone}
+                niche={detail?.lead?.niche}
+                onSent={refreshSelectedConversation}
+                disabled={detail?.conversation.workflowStatus === 'dnc'}
+              />
+              {isMobile ? <LeadDetailsPanel detail={detail} onUpdated={refreshSelectedConversation} /> : null}
+            </div>
+          ) : null}
 
-        {!isMobile ? <LeadDetailsPanel detail={detail} onUpdated={refreshSelectedConversation} /> : null}
-      </div>
+          {!isMobile ? <LeadDetailsPanel detail={detail} onUpdated={refreshSelectedConversation} /> : null}
+        </div>
+      )}
     </main>
   );
 }
