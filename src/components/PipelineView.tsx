@@ -77,7 +77,6 @@ function fmtMeeting(lead: Lead) {
   return parts.length ? parts.join(' at ') : null;
 }
 
-/* ─── Add Lead Modal ─── */
 function AddLeadModal({ onAdd, onClose }: { onAdd: (l: Lead) => void; onClose: () => void }) {
   const [name, setName] = useState('');
   const [business, setBusiness] = useState('');
@@ -107,17 +106,14 @@ function AddLeadModal({ onAdd, onClose }: { onAdd: (l: Lead) => void; onClose: (
           <span className="plModalTitle">Add Lead</span>
           <button className="plModalClose" onClick={onClose}>×</button>
         </div>
-
         <div className="plField">
           <label className="plLabel">Name *</label>
           <input className="plInput" value={name} onChange={e => setName(e.target.value)} placeholder="John Smith" autoFocus />
         </div>
-
         <div className="plField">
           <label className="plLabel">Business *</label>
           <input className="plInput" value={business} onChange={e => setBusiness(e.target.value)} placeholder="Smith's Auto Detail" />
         </div>
-
         <div className="plRow">
           <div className="plField">
             <label className="plLabel">Source</label>
@@ -133,7 +129,6 @@ function AddLeadModal({ onAdd, onClose }: { onAdd: (l: Lead) => void; onClose: (
             </select>
           </div>
         </div>
-
         {stage === 'meeting-booked' && (
           <div className="plField">
             <label className="plLabel">Meeting Date &amp; Time</label>
@@ -148,12 +143,10 @@ function AddLeadModal({ onAdd, onClose }: { onAdd: (l: Lead) => void; onClose: (
             </div>
           </div>
         )}
-
         <div className="plField">
           <label className="plLabel">Notes</label>
           <textarea className="plTextarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any context on this lead..." rows={3} />
         </div>
-
         <div className="plModalActions">
           <button className="plBtnSecondary" onClick={onClose}>Cancel</button>
           <button className="plBtnPrimary" onClick={submit} disabled={!name.trim() || !business.trim()}>Add Lead</button>
@@ -163,15 +156,11 @@ function AddLeadModal({ onAdd, onClose }: { onAdd: (l: Lead) => void; onClose: (
   );
 }
 
-/* ─── Lead Profile ─── */
 function LeadProfile({
   lead, onBack, onUpdate, onMove, onDelete,
 }: {
-  lead: Lead;
-  onBack: () => void;
-  onUpdate: (l: Lead) => void;
-  onMove: (id: string, stage: Stage) => void;
-  onDelete: (id: string) => void;
+  lead: Lead; onBack: () => void; onUpdate: (l: Lead) => void;
+  onMove: (id: string, stage: Stage) => void; onDelete: (id: string) => void;
 }) {
   const [notes, setNotes] = useState(lead.notes);
   const [meetingDate, setMeetingDate] = useState(lead.meetingDate || '');
@@ -192,7 +181,6 @@ function LeadProfile({
           Delete lead
         </button>
       </div>
-
       <div className="plProfileCard">
         <div className="plProfileHeader">
           <div>
@@ -206,7 +194,6 @@ function LeadProfile({
             </span>
           </div>
         </div>
-
         {lead.stage === 'meeting-booked' && (
           <div className="plProfileSection">
             <div className="plSectionLabel">Meeting date &amp; time</div>
@@ -221,19 +208,10 @@ function LeadProfile({
             </div>
           </div>
         )}
-
         <div className="plProfileSection">
           <div className="plSectionLabel">Notes</div>
-          <textarea
-            className="plTextarea plProfileNotes"
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            onBlur={saveNotes}
-            placeholder="Add notes about this lead..."
-            rows={10}
-          />
+          <textarea className="plTextarea plProfileNotes" value={notes} onChange={e => setNotes(e.target.value)} onBlur={saveNotes} placeholder="Add notes about this lead..." rows={10} />
         </div>
-
         {nextStage && moveLabel && (
           <div className="plProfileSection">
             <button className="plMoveBtn plMoveBtnLarge" onClick={() => { onMove(lead.id, nextStage); onBack(); }}>
@@ -246,17 +224,12 @@ function LeadProfile({
   );
 }
 
-/* ─── Lead Card ─── */
 function LeadCard({
   lead, onMove, onDelete, onUpdateNotes, onOpenProfile, isDragging, onDragStart,
 }: {
-  lead: Lead;
-  onMove: (id: string, stage: Stage) => void;
-  onDelete: (id: string) => void;
-  onUpdateNotes: (id: string, notes: string) => void;
-  onOpenProfile: (lead: Lead) => void;
-  isDragging: boolean;
-  onDragStart: (e: React.DragEvent, id: string) => void;
+  lead: Lead; onMove: (id: string, stage: Stage) => void; onDelete: (id: string) => void;
+  onUpdateNotes: (id: string, notes: string) => void; onOpenProfile: (lead: Lead) => void;
+  isDragging: boolean; onDragStart: (e: React.DragEvent, id: string) => void;
 }) {
   const [notes, setNotes] = useState(lead.notes);
   const nextStage = NEXT_STAGE[lead.stage];
@@ -264,11 +237,7 @@ function LeadCard({
   const meeting = fmtMeeting(lead);
 
   return (
-    <div
-      className={`plCard${isDragging ? ' plCard--dragging' : ''}`}
-      draggable
-      onDragStart={e => onDragStart(e, lead.id)}
-    >
+    <div className={`plCard${isDragging ? ' plCard--dragging' : ''}`} draggable onDragStart={e => onDragStart(e, lead.id)}>
       <div className="plCardHeader" onClick={() => onOpenProfile(lead)} style={{ cursor: 'pointer' }}>
         <div>
           <div className="plCardName">{lead.name}</div>
@@ -276,9 +245,7 @@ function LeadCard({
         </div>
         <span className={`plSourceBadge plSourceBadge--${lead.source === 'SMS' ? 'sms' : 'ig'}`}>{lead.source}</span>
       </div>
-
       {meeting && <div className="plMeetingChip">📅 {meeting}</div>}
-
       <textarea
         className="plNotesArea"
         value={notes}
@@ -288,7 +255,6 @@ function LeadCard({
         placeholder="Add notes..."
         rows={2}
       />
-
       <div className="plCardActions">
         {nextStage && moveLabel && (
           <button className="plMoveBtn" onClick={e => { e.stopPropagation(); onMove(lead.id, nextStage); }}>
@@ -303,7 +269,6 @@ function LeadCard({
   );
 }
 
-/* ─── Pipeline View ─── */
 export function PipelineView() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -318,27 +283,23 @@ export function PipelineView() {
   function handleMove(id: string, stage: Stage) { update(leads.map(l => l.id === id ? { ...l, stage } : l)); }
   function handleDelete(id: string) { update(leads.filter(l => l.id !== id)); }
   function handleUpdateNotes(id: string, notes: string) { update(leads.map(l => l.id === id ? { ...l, notes } : l)); }
-  function handleUpdateLead(updated: Lead) {
-    update(leads.map(l => l.id === updated.id ? updated : l));
-    setProfileLead(updated);
-  }
+  function handleUpdateLead(updated: Lead) { update(leads.map(l => l.id === updated.id ? updated : l)); setProfileLead(updated); }
 
-  function onDragStart(e: React.DragEvent, id: string) {
-    setDraggingId(id);
-    e.dataTransfer.effectAllowed = 'move';
-  }
-  function onDragOver(e: React.DragEvent, stage: Stage) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setDragOverStage(stage);
-  }
-  function onDrop(e: React.DragEvent, stage: Stage) {
-    e.preventDefault();
-    if (draggingId) handleMove(draggingId, stage);
-    setDraggingId(null);
-    setDragOverStage(null);
-  }
+  function onDragStart(e: React.DragEvent, id: string) { setDraggingId(id); e.dataTransfer.effectAllowed = 'move'; }
+  function onDragOver(e: React.DragEvent, stage: Stage) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverStage(stage); }
+  function onDrop(e: React.DragEvent, stage: Stage) { e.preventDefault(); if (draggingId) handleMove(draggingId, stage); setDraggingId(null); setDragOverStage(null); }
   function onDragEnd() { setDraggingId(null); setDragOverStage(null); }
+
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'n' && !showModal && !profileLead) {
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') setShowModal(true);
+      }
+    }
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [showModal, profileLead]);
 
   if (profileLead) {
     const live = leads.find(l => l.id === profileLead.id) || profileLead;
@@ -357,24 +318,18 @@ export function PipelineView() {
         <div className="plTopBar">
           <div>
             <div className="plViewTitle">Pipeline</div>
-            <div className="plViewSub">Track leads from first contact to close.</div>
+            <div className="plViewSub">Track leads from first contact to close. Press <kbd className="plKbd">N</kbd> to add.</div>
           </div>
           <button className="plAddBtn" onClick={() => setShowModal(true)}>+ Add Lead</button>
         </div>
-
         <div className="plColumns">
           {STAGES.map(stage => {
             const stageLeads = leads.filter(l => l.stage === stage.id);
             const isOver = dragOverStage === stage.id;
             return (
-              <div
-                key={stage.id}
-                className={`plColumn${isOver ? ' plColumn--over' : ''}`}
-                onDragOver={e => onDragOver(e, stage.id)}
-                onDrop={e => onDrop(e, stage.id)}
-                onDragLeave={() => setDragOverStage(null)}
-                onDragEnd={onDragEnd}
-              >
+              <div key={stage.id} className={`plColumn${isOver ? ' plColumn--over' : ''}`}
+                onDragOver={e => onDragOver(e, stage.id)} onDrop={e => onDrop(e, stage.id)}
+                onDragLeave={() => setDragOverStage(null)} onDragEnd={onDragEnd}>
                 <div className="plColHeader">
                   <span className="plColLabel">
                     <span className="plColDot" style={{ background: stage.color }} />
@@ -386,25 +341,16 @@ export function PipelineView() {
                   {stageLeads.length === 0
                     ? <div className="plEmpty">Drop leads here</div>
                     : stageLeads.map(lead => (
-                      <LeadCard
-                        key={lead.id}
-                        lead={lead}
-                        onMove={handleMove}
-                        onDelete={handleDelete}
-                        onUpdateNotes={handleUpdateNotes}
-                        onOpenProfile={setProfileLead}
-                        isDragging={draggingId === lead.id}
-                        onDragStart={onDragStart}
-                      />
-                    ))
-                  }
+                      <LeadCard key={lead.id} lead={lead} onMove={handleMove} onDelete={handleDelete}
+                        onUpdateNotes={handleUpdateNotes} onOpenProfile={setProfileLead}
+                        isDragging={draggingId === lead.id} onDragStart={onDragStart} />
+                    ))}
                 </div>
               </div>
             );
           })}
         </div>
       </div>
-
       {showModal && <AddLeadModal onAdd={handleAdd} onClose={() => setShowModal(false)} />}
     </>
   );
@@ -415,163 +361,75 @@ const css = `
 .plTopBar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .plViewTitle { font-size: 16px; font-weight: 600; color: #d4d4d3; }
 .plViewSub { font-size: 12px; color: #7a7a8a; margin-top: 2px; }
-.plAddBtn {
-  background: linear-gradient(90deg, #8b5cf6 0%, #60a5fa 100%);
-  color: #fff; border: none; border-radius: 10px;
-  padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
-  box-shadow: 0 4px 16px rgba(139,92,246,0.25); white-space: nowrap;
-}
+.plKbd { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 4px; padding: 1px 5px; font-size: 11px; color: #a78bfa; font-family: inherit; }
+.plAddBtn { background: linear-gradient(90deg, #8b5cf6 0%, #60a5fa 100%); color: #fff; border: none; border-radius: 10px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 16px rgba(139,92,246,0.25); white-space: nowrap; }
 .plAddBtn:hover { opacity: 0.9; }
-
 .plColumns { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; align-items: start; }
 @media (max-width: 760px) { .plColumns { grid-template-columns: 1fr; } }
-
-.plColumn {
-  background: rgba(255,255,255,0.025);
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 14px; overflow: hidden;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.plColumn--over {
-  border-color: rgba(139,92,246,0.5);
-  box-shadow: 0 0 0 2px rgba(139,92,246,0.15);
-}
-.plColHeader {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.06);
-}
+.plColumn { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s; }
+.plColumn--over { border-color: rgba(139,92,246,0.5); box-shadow: 0 0 0 2px rgba(139,92,246,0.15); }
+.plColHeader { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.06); }
 .plColLabel { font-size: 13px; font-weight: 600; color: #d4d4d3; display: flex; align-items: center; gap: 8px; }
 .plColDot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .plColCount { font-size: 11px; color: #7a7a8a; background: rgba(255,255,255,0.06); border-radius: 4px; padding: 2px 7px; }
 .plColBody { padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 100px; }
-.plEmpty {
-  color: #7a7a8a; font-size: 12px; text-align: center; padding: 28px 0;
-  border: 1px dashed rgba(255,255,255,0.08); border-radius: 8px;
-}
-
-.plCard {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 10px; padding: 12px;
-  cursor: grab; transition: opacity 0.15s, box-shadow 0.15s; user-select: none;
-}
+.plEmpty { color: #7a7a8a; font-size: 12px; text-align: center; padding: 28px 0; border: 1px dashed rgba(255,255,255,0.08); border-radius: 8px; }
+.plCard { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; cursor: grab; transition: opacity 0.15s, box-shadow 0.15s; user-select: none; }
 .plCard:active { cursor: grabbing; }
 .plCard--dragging { opacity: 0.35; }
 .plCard:hover { box-shadow: 0 4px 18px rgba(0,0,0,0.35); }
-
 .plCardHeader { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; gap: 8px; }
 .plCardName { font-size: 13px; font-weight: 600; color: #d4d4d3; line-height: 1.3; }
 .plCardBusiness { font-size: 12px; color: #7a7a8a; margin-top: 2px; }
-
 .plSourceBadge { font-size: 10px; font-weight: 600; border-radius: 5px; padding: 2px 8px; white-space: nowrap; flex-shrink: 0; }
 .plSourceBadge--sms { background: rgba(96,165,250,0.15); color: #93c5fd; border: 1px solid rgba(96,165,250,0.25); }
 .plSourceBadge--ig  { background: rgba(167,139,250,0.15); color: #c4b5fd; border: 1px solid rgba(167,139,250,0.25); }
-
-.plMeetingChip {
-  font-size: 11px; color: #93c5fd; margin-bottom: 8px;
-  background: rgba(96,165,250,0.08); border-radius: 5px; padding: 4px 8px;
-}
-.plNotesArea {
-  width: 100%; box-sizing: border-box;
-  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 6px; color: #d4d4d3; font-size: 12px; font-family: inherit;
-  padding: 6px 8px; resize: vertical; margin-bottom: 8px; line-height: 1.5;
-}
+.plMeetingChip { font-size: 11px; color: #93c5fd; margin-bottom: 8px; background: rgba(96,165,250,0.08); border-radius: 5px; padding: 4px 8px; }
+.plNotesArea { width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 6px; color: #d4d4d3; font-size: 12px; font-family: inherit; padding: 6px 8px; resize: vertical; margin-bottom: 8px; line-height: 1.5; }
 .plNotesArea::placeholder { color: rgba(255,255,255,0.2); }
 .plNotesArea:focus { outline: none; border-color: rgba(139,92,246,0.4); }
-
 .plCardActions { display: flex; align-items: center; justify-content: space-between; }
-.plMoveBtn {
-  font-size: 11px; font-weight: 600; color: #c4b5fd;
-  background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.25);
-  border-radius: 6px; padding: 4px 10px; cursor: pointer; white-space: nowrap;
-}
+.plMoveBtn { font-size: 11px; font-weight: 600; color: #c4b5fd; background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.25); border-radius: 6px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
 .plMoveBtn:hover { background: rgba(139,92,246,0.22); }
 .plMoveBtnLarge { width: 100%; padding: 12px; font-size: 14px; border-radius: 10px; text-align: center; }
 .plDeleteCardBtn { font-size: 11px; color: rgba(255,255,255,0.25); background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: 4px; }
 .plDeleteCardBtn:hover { color: #f87171; background: rgba(248,113,113,0.1); }
-
-/* Profile */
 .plProfile { padding: 20px; min-height: 100%; }
 .plProfileTopBar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-.plBackBtn {
-  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-  color: #d4d4d3; border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 500; cursor: pointer;
-}
+.plBackBtn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #d4d4d3; border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 500; cursor: pointer; }
 .plBackBtn:hover { background: rgba(255,255,255,0.09); }
-.plDeleteBtn {
-  background: none; border: 1px solid rgba(248,113,113,0.25);
-  color: #f87171; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer;
-}
+.plDeleteBtn { background: none; border: 1px solid rgba(248,113,113,0.25); color: #f87171; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
 .plDeleteBtn:hover { background: rgba(248,113,113,0.1); }
-
-.plProfileCard {
-  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 16px; padding: 28px; max-width: 700px;
-}
-.plProfileHeader {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 12px; margin-bottom: 28px; padding-bottom: 24px;
-  border-bottom: 1px solid rgba(255,255,255,0.07);
-}
+.plProfileCard { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 28px; max-width: 700px; }
+.plProfileHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 28px; padding-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.07); }
 .plProfileName { font-size: 24px; font-weight: 700; color: #e8e8e7; line-height: 1.2; }
 .plProfileBusiness { font-size: 15px; color: #7a7a8a; margin-top: 5px; }
 .plProfileBadges { display: flex; gap: 8px; align-items: center; flex-shrink: 0; flex-wrap: wrap; }
 .plStagePill { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 4px 12px; white-space: nowrap; }
-
 .plProfileSection { margin-bottom: 22px; }
-.plSectionLabel {
-  font-size: 11px; font-weight: 700; color: #7a7a8a;
-  text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px;
-}
+.plSectionLabel { font-size: 11px; font-weight: 700; color: #7a7a8a; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; }
 .plProfileNotes { width: 100%; box-sizing: border-box; font-size: 14px; line-height: 1.7; }
-
-/* Modal */
-.plOverlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.72);
-  display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px;
-}
-.plModal {
-  background: #14141c; border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 16px; padding: 24px; width: 100%; max-width: 460px; max-height: 90vh; overflow-y: auto;
-}
+.plOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+.plModal { background: #14141c; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 24px; width: 100%; max-width: 460px; max-height: 90vh; overflow-y: auto; }
 .plModalHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .plModalTitle { font-size: 16px; font-weight: 600; color: #d4d4d3; }
 .plModalClose { background: none; border: none; color: #7a7a8a; font-size: 22px; cursor: pointer; line-height: 1; padding: 0 4px; }
 .plModalClose:hover { color: #d4d4d3; }
-
 .plField { margin-bottom: 14px; }
 .plRow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .plLabel { display: block; font-size: 11px; font-weight: 700; color: #7a7a8a; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.06em; }
-
-.plInput, .plSelect, .plTextarea {
-  width: 100%; box-sizing: border-box;
-  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 8px; color: #d4d4d3; font-size: 13px; font-family: inherit;
-  padding: 9px 11px; color-scheme: dark;
-}
+.plInput, .plSelect, .plTextarea { width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #d4d4d3; font-size: 13px; font-family: inherit; padding: 9px 11px; color-scheme: dark; }
 .plInput:focus, .plSelect:focus, .plTextarea:focus { outline: none; border-color: rgba(139,92,246,0.5); }
 .plSelect option { background: #14141c; }
 .plTextarea { resize: vertical; }
-
 .plTimeRow { display: flex; gap: 8px; align-items: center; }
 .plDateInput  { flex: 2; }
 .plTimeSelect { flex: 1.2; }
 .plMinSelect  { flex: 0.9; }
-
 .plModalActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-.plBtnPrimary {
-  background: linear-gradient(90deg, #8b5cf6 0%, #60a5fa 100%);
-  color: #fff; border: none; border-radius: 8px; padding: 9px 20px;
-  font-size: 13px; font-weight: 600; cursor: pointer;
-  box-shadow: 0 4px 14px rgba(139,92,246,0.3);
-}
+.plBtnPrimary { background: linear-gradient(90deg, #8b5cf6 0%, #60a5fa 100%); color: #fff; border: none; border-radius: 8px; padding: 9px 20px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 14px rgba(139,92,246,0.3); }
 .plBtnPrimary:hover:not(:disabled) { opacity: 0.9; }
 .plBtnPrimary:disabled { opacity: 0.4; cursor: not-allowed; }
-.plBtnSecondary {
-  background: rgba(255,255,255,0.05); color: #7a7a8a;
-  border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;
-  padding: 9px 20px; font-size: 13px; cursor: pointer;
-}
+.plBtnSecondary { background: rgba(255,255,255,0.05); color: #7a7a8a; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 9px 20px; font-size: 13px; cursor: pointer; }
 .plBtnSecondary:hover { background: rgba(255,255,255,0.09); }
 `;
