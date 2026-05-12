@@ -10,7 +10,7 @@ type Props = {
   onSelect: (phone: string) => void;
 };
 
-type FilterMode = 'work' | 'highly-interested' | 'active' | 'follow-up' | 'closed' | 'dnc' | 'all';
+type FilterMode = 'all' | 'hot' | 'dnc';
 
 function sortConversations(items: ConversationSummary[]): ConversationSummary[] {
   return [...items].sort((a, b) => {
@@ -32,102 +32,150 @@ function getStatusPillLabel(status: LeadWorkflowStatus) {
   return 'Active';
 }
 
-function isHighlyInterested(responseType: string | null) {
+function isHot(responseType: string | null) {
   return (responseType || '').trim().toLowerCase() === 'highly interested';
 }
 
 export function ConversationList({ conversations, selectedPhone, onSelect }: Props) {
   const [search, setSearch] = useState('');
-  const [filterMode, setFilterMode] = useState<FilterMode>('work');
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
 
-  const filteredConversations = useMemo(() => {
+  const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const matching = conversations.filter((conversation) => {
-      const haystack = [
-        conversation.businessName,
-        conversation.phone,
-        conversation.lastMessageBody,
-        conversation.replyText,
-        conversation.responseType,
-        conversation.niche,
-      ].filter(Boolean).join(' ').toLowerCase();
-      const matchesSearch = !query || haystack.includes(query);
-      if (!matchesSearch) return false;
-      if (filterMode === 'all') return true;
-      if (filterMode === 'work') {
-        return conversation.workflowStatus === 'active' || conversation.workflowStatus === 'follow-up';
-      }
-      if (filterMode === 'highly-interested') return isHighlyInterested(conversation.responseType);
-      return conversation.workflowStatus === filterMode;
+    const matching = conversations.filter((c) => {
+      const haystack = [c.businessName, c.phone, c.lastMessageBody, c.replyText, c.responseType, c.niche]
+        .filter(Boolean).join(' ').toLowerCase();
+      if (query && !haystack.includes(query)) return false;
+      if (filterMode === 'hot') return isHot(c.responseType);
+      if (filterMode === 'dnc') return c.workflowStatus === 'dnc';
+      return true;
     });
     return sortConversations(matching);
   }, [conversations, filterMode, search]);
 
+  const tabs: { id: FilterMode; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'hot', label: 'Hot Leads' },
+    { id: 'dnc', label: 'DNC' },
+  ];
+
   return (
     <aside className="sidebar">
-      <div className="sidebarHeader">
+      <style>{`
+        .cl-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 14px;
+        }
+        .cl-title {
+          font-size: 18px;
+          font-weight: 700;
+          color: #e8e8e7;
+          margin: 0 0 3px;
+        }
+        .cl-sub { font-size: 12px; color: #7a7a8a; margin: 0; }
+        .cl-count { font-size: 12px; color: #7a7a8a; white-space: nowrap; margin-top: 3px; }
+        .cl-search {
+          width: 100%;
+          box-sizing: border-box;
+          background: rgba(255,255,255,0.04);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 10px;
+          padding: 10px 12px;
+          color: #d4d4d3;
+          font-size: 13px;
+          font-family: inherit;
+          margin-bottom: 10px;
+        }
+        .cl-search:focus { outline: none; border-color: rgba(139,92,246,0.45); }
+        .cl-search::placeholder { color: #7a7a8a; }
+        .cl-tabs {
+          display: flex;
+          gap: 6px;
+          margin-bottom: 14px;
+        }
+        .cl-tab {
+          flex: 1;
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.07);
+          border-radius: 8px;
+          color: #7a7a8a;
+          font-size: 12px;
+          font-weight: 600;
+          font-family: inherit;
+          padding: 7px 6px;
+          cursor: pointer;
+          transition: all 0.15s;
+          white-space: nowrap;
+          text-align: center;
+        }
+        .cl-tab:hover { color: #d4d4d3; background: rgba(255,255,255,0.06); }
+        .cl-tab--active {
+          background: rgba(139,92,246,0.15);
+          border-color: rgba(139,92,246,0.35);
+          color: #c4b5fd;
+        }
+      `}</style>
+
+      <div className="cl-header">
         <div>
-          <h2>Inbox</h2>
-          <span>Focused on leads that still matter</span>
+          <h2 className="cl-title">Inbox</h2>
+          <p className="cl-sub">SMS leads</p>
         </div>
-        <span>{filteredConversations.length} shown</span>
+        <span className="cl-count">{filtered.length} shown</span>
       </div>
 
-      <div className="sidebarControls">
-        <input
-          className="searchInput"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search business, phone, note, or message"
-        />
-        <div className="filterChips">
-          {(['work','highly-interested','active','follow-up','closed','dnc','all'] as FilterMode[]).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              className={`filterChip ${filterMode === mode ? 'active' : ''}`}
-              onClick={() => setFilterMode(mode)}
-            >
-              {mode === 'work' ? 'Work queue'
-                : mode === 'highly-interested' ? 'Hot leads'
-                : mode === 'follow-up' ? 'Follow up'
-                : mode.charAt(0).toUpperCase() + mode.slice(1)}
-            </button>
-          ))}
-        </div>
+      <input
+        className="cl-search"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Search business, phone, message…"
+      />
+
+      <div className="cl-tabs">
+        {tabs.map(t => (
+          <button
+            key={t.id}
+            className={`cl-tab${filterMode === t.id ? ' cl-tab--active' : ''}`}
+            onClick={() => setFilterMode(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
       <div className="conversationList">
-        {filteredConversations.length ? filteredConversations.map((conversation) => {
-          const isActive = selectedPhone === conversation.phone;
+        {filtered.length ? filtered.map((c) => {
+          const isActive = selectedPhone === c.phone;
           return (
             <button
-              key={conversation.phone}
-              className={`conversationCard ${isActive ? 'active' : ''} ${conversation.needsResponse ? 'needsResponseCard' : ''}`}
-              onClick={() => onSelect(conversation.phone)}
+              key={c.phone}
+              className={`conversationCard ${isActive ? 'active' : ''} ${c.needsResponse ? 'needsResponseCard' : ''}`}
+              onClick={() => onSelect(c.phone)}
             >
               <div className="conversationTopRow">
-                <strong>{conversation.businessName || formatPhoneDisplay(conversation.phone)}</strong>
-                <span>{conversation.lastMessageAt ? new Date(conversation.lastMessageAt).toLocaleDateString() : ''}</span>
+                <strong>{c.businessName || formatPhoneDisplay(c.phone)}</strong>
+                <span>{c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleDateString() : ''}</span>
               </div>
               <div className="conversationMetaRow">
-                <div className="conversationMeta">{formatPhoneDisplay(conversation.phone)}</div>
+                <div className="conversationMeta">{formatPhoneDisplay(c.phone)}</div>
                 <div className="conversationBadgeStack">
-                  <span className={`statusPill ${conversation.workflowStatus}`}>{getStatusPillLabel(conversation.workflowStatus)}</span>
-                  {isHighlyInterested(conversation.responseType) ? <span className="statusPill highlyInterested">Hot lead</span> : null}
-                  {conversation.needsResponse ? <span className="needsResponseBadge">Needs response</span> : null}
+                  <span className={`statusPill ${c.workflowStatus}`}>{getStatusPillLabel(c.workflowStatus)}</span>
+                  {isHot(c.responseType) ? <span className="statusPill highlyInterested">Hot lead</span> : null}
+                  {c.needsResponse ? <span className="needsResponseBadge">Needs response</span> : null}
                 </div>
               </div>
-              {conversation.nextFollowUpAt ? (
-                <div className="followUpText">Follow up: {new Date(conversation.nextFollowUpAt).toLocaleString()}</div>
+              {c.nextFollowUpAt ? (
+                <div className="followUpText">Follow up: {new Date(c.nextFollowUpAt).toLocaleString()}</div>
               ) : null}
               <div className="conversationPreview">
-                {conversation.lastMessageBody || conversation.replyText || 'No messages yet'}
+                {c.lastMessageBody || c.replyText || 'No messages yet'}
               </div>
             </button>
           );
         }) : (
-          <div className="emptyState sidebarEmptyState">No conversations match that filter.</div>
+          <div className="emptyState sidebarEmptyState">No conversations match.</div>
         )}
       </div>
     </aside>
