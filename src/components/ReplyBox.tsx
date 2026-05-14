@@ -17,11 +17,11 @@ export function ReplyBox({ phone, niche, onSent, disabled = false }: Props) {
   const presets = [
     {
       label: 'Message 2',
-      text: `Hey man my name is Ali, I work with local ${nicheLabel} and had a quick question. Are you booked out right now or do you have room for more jobs this month?`,
+      text: `Hey man my name is Ali, I work with local ${nicheLabel} and had a quick question. Are u booked out right now or do u have room for more jobs this month?`,
     },
     {
       label: 'Message 3',
-      text: `Okay awesome. We run meta ads for ${nicheLabel} that bring in booked appointments and recently got a client 6 leads in 3 days at $6.77 a lead. We're offering a free 7 day trial right now where you just cover the ad spend and we handle everything. Would you be open to a quick call to see if it makes sense? If not say stop`,
+      text: `Okay awesome. We run meta ads for ${nicheLabel} that bring in booked appointments and recently got a client 6 leads in 3 days at $6.77 a lead. We're offering a free 7 day trial right now where u just cover the ad spend and we handle everything. Would u be open to a quick call to see if it makes sense? If not say stop`,
     },
   ];
 
