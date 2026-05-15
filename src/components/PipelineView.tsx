@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
-type Stage = 'needs-call' | 'meeting-booked' | 'closed-dead';
+type Stage = 'needs-call' | 'meeting-booked' | 'closed' | 'dead';
 type Source = 'SMS' | 'Instagram DM' | 'Cold Call';
 
 interface Lead {
@@ -11,32 +11,34 @@ interface Lead {
   business: string;
   phone?: string;
   source: Source;
-  notes: string;
   stage: Stage;
+  notes: string;
   meetingDate?: string;
   meetingHour?: string;
   meetingMinute?: string;
-  createdAt: number;
+  createdAt: string;
+  rowNumber: number;
 }
-
-const STORAGE_KEY = 'pipeline_leads_v1';
 
 const STAGES: { id: Stage; label: string; color: string }[] = [
   { id: 'needs-call',     label: 'Needs a Call',   color: '#a78bfa' },
   { id: 'meeting-booked', label: 'Meeting Booked',  color: '#60a5fa' },
-  { id: 'closed-dead',    label: 'Closed / Dead',   color: '#4b5563' },
+  { id: 'closed',         label: 'Closed',          color: '#22c55e' },
+  { id: 'dead',           label: 'Dead',            color: '#ef4444' },
 ];
 
 const NEXT_STAGE: Record<Stage, Stage | null> = {
-  'needs-call': 'meeting-booked',
-  'meeting-booked': 'closed-dead',
-  'closed-dead': null,
+  'needs-call':     'meeting-booked',
+  'meeting-booked': 'closed',
+  'closed':         null,
+  'dead':           null,
 };
 
 const MOVE_LABEL: Record<Stage, string | null> = {
-  'needs-call': 'Mark as Booked →',
-  'meeting-booked': 'Move to Closed →',
-  'closed-dead': null,
+  'needs-call':     'Mark as Booked →',
+  'meeting-booked': 'Mark as Closed →',
+  'closed':         null,
+  'dead':           null,
 };
 
 const HOURS = Array.from({ length: 17 }, (_, i) => {
@@ -53,16 +55,6 @@ const MINUTES = [
 ];
 
 function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
-
-function loadLeads(): Lead[] {
-  if (typeof window === 'undefined') return [];
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') as Lead[]; }
-  catch { return []; }
-}
-
-function saveLeads(leads: Lead[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(leads));
-}
 
 function fmtMeeting(lead: Lead) {
   const parts: string[] = [];
@@ -85,8 +77,41 @@ function sourceBadgeClass(source: Source) {
   return 'plSourceBadge--call';
 }
 
+/* ─── API helpers ─── */
+async function apiGet(): Promise<Lead[]> {
+  const res = await fetch('/api/pipeline', { cache: 'no-store' });
+  if (!res.ok) throw new Error('Failed to load pipeline.');
+  const data = await res.json();
+  return data.leads ?? [];
+}
+
+async function apiAdd(lead: Omit<Lead, 'rowNumber'>): Promise<Lead> {
+  const res = await fetch('/api/pipeline', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(lead),
+  });
+  if (!res.ok) throw new Error('Failed to add lead.');
+  const data = await res.json();
+  return data.lead;
+}
+
+async function apiUpdate(lead: Lead): Promise<void> {
+  const res = await fetch(`/api/pipeline/${lead.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(lead),
+  });
+  if (!res.ok) throw new Error('Failed to update lead.');
+}
+
+async function apiDelete(id: string): Promise<void> {
+  const res = await fetch(`/api/pipeline/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete lead.');
+}
+
 /* ─── Add Lead Modal ─── */
-function AddLeadModal({ onAdd, onClose }: { onAdd: (l: Lead) => void; onClose: () => void }) {
+function AddLeadModal({ onAdd, onClose }: { onAdd: (l: Omit<Lead, 'rowNumber'>) => void; onClose: () => void }) {
   const [name, setName] = useState('');
   const [business, setBusiness] = useState('');
   const [phone, setPhone] = useState('');
@@ -100,13 +125,17 @@ function AddLeadModal({ onAdd, onClose }: { onAdd: (l: Lead) => void; onClose: (
   function submit() {
     if (!name.trim() || !business.trim()) return;
     onAdd({
-      id: uid(), name: name.trim(), business: business.trim(),
+      id: uid(),
+      name: name.trim(),
+      business: business.trim(),
       phone: phone.trim() || undefined,
-      source, notes: notes.trim(), stage,
+      source,
+      stage,
+      notes: notes.trim(),
       meetingDate: stage === 'meeting-booked' ? meetingDate : undefined,
       meetingHour: stage === 'meeting-booked' ? meetingHour : undefined,
       meetingMinute: stage === 'meeting-booked' ? meetingMinute : undefined,
-      createdAt: Date.now(),
+      createdAt: new Date().toISOString(),
     });
     onClose();
   }
@@ -175,30 +204,42 @@ function AddLeadModal({ onAdd, onClose }: { onAdd: (l: Lead) => void; onClose: (
 
 /* ─── Lead Profile ─── */
 function LeadProfile({
-  lead, onBack, onUpdate, onMove, onDelete, onGoToSMS,
+  lead, onBack, onSave, onMove, onDelete, onGoToSMS,
 }: {
-  lead: Lead; onBack: () => void; onUpdate: (l: Lead) => void;
-  onMove: (id: string, stage: Stage) => void; onDelete: (id: string) => void;
+  lead: Lead; onBack: () => void;
+  onSave: (l: Lead) => Promise<void>;
+  onMove: (id: string, stage: Stage) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
   onGoToSMS: (phone: string) => void;
 }) {
   const [notes, setNotes] = useState(lead.notes);
   const [meetingDate, setMeetingDate] = useState(lead.meetingDate || '');
   const [meetingHour, setMeetingHour] = useState(lead.meetingHour || '09');
   const [meetingMinute, setMeetingMinute] = useState(lead.meetingMinute || '00');
+  const [saving, setSaving] = useState(false);
+
   const stageInfo = STAGES.find(s => s.id === lead.stage)!;
   const nextStage = NEXT_STAGE[lead.stage];
   const moveLabel = MOVE_LABEL[lead.stage];
 
-  function saveNotes() { onUpdate({ ...lead, notes }); }
-  function saveMeeting() { onUpdate({ ...lead, meetingDate, meetingHour, meetingMinute }); }
+  async function saveNotes() {
+    setSaving(true);
+    await onSave({ ...lead, notes });
+    setSaving(false);
+  }
+  async function saveMeeting() {
+    setSaving(true);
+    await onSave({ ...lead, meetingDate, meetingHour, meetingMinute });
+    setSaving(false);
+  }
 
   return (
     <div className="plProfile">
       <div className="plProfileTopBar">
         <button className="plBackBtn" onClick={onBack}>← Back to Pipeline</button>
-        <button className="plDeleteBtn" onClick={() => { if (confirm('Delete this lead?')) { onDelete(lead.id); onBack(); } }}>
-          Delete lead
-        </button>
+        <button className="plDeleteBtn" onClick={async () => {
+          if (confirm('Delete this lead?')) { await onDelete(lead.id); onBack(); }
+        }}>Delete lead</button>
       </div>
       <div className="plProfileCard">
         <div className="plProfileHeader">
@@ -215,7 +256,6 @@ function LeadProfile({
           </div>
         </div>
 
-        {/* SMS link button */}
         {lead.source === 'SMS' && lead.phone && (
           <div className="plProfileSection">
             <button className="plSmsBtn" onClick={() => onGoToSMS(lead.phone!)}>
@@ -240,17 +280,22 @@ function LeadProfile({
         )}
 
         <div className="plProfileSection">
-          <div className="plSectionLabel">Notes</div>
+          <div className="plSectionLabel">Notes {saving ? '· Saving…' : ''}</div>
           <textarea className="plTextarea plProfileNotes" value={notes} onChange={e => setNotes(e.target.value)} onBlur={saveNotes} placeholder="Add notes about this lead..." rows={10} />
         </div>
 
-        {nextStage && moveLabel && (
-          <div className="plProfileSection">
-            <button className="plMoveBtn plMoveBtnLarge" onClick={() => { onMove(lead.id, nextStage); onBack(); }}>
+        <div className="plProfileActions">
+          {nextStage && moveLabel && (
+            <button className="plMoveBtn plMoveBtnLarge" onClick={async () => { await onMove(lead.id, nextStage); onBack(); }}>
               {moveLabel}
             </button>
-          </div>
-        )}
+          )}
+          {lead.stage !== 'dead' && (
+            <button className="plDeadBtn" onClick={async () => { await onMove(lead.id, 'dead'); onBack(); }}>
+              Mark as Dead
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -258,11 +303,15 @@ function LeadProfile({
 
 /* ─── Lead Card ─── */
 function LeadCard({
-  lead, onMove, onDelete, onUpdateNotes, onOpenProfile, isDragging, onDragStart, onGoToSMS,
+  lead, onMove, onDelete, onSaveNotes, onOpenProfile, isDragging, onDragStart, onGoToSMS,
 }: {
-  lead: Lead; onMove: (id: string, stage: Stage) => void; onDelete: (id: string) => void;
-  onUpdateNotes: (id: string, notes: string) => void; onOpenProfile: (lead: Lead) => void;
-  isDragging: boolean; onDragStart: (e: React.DragEvent, id: string) => void;
+  lead: Lead;
+  onMove: (id: string, stage: Stage) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+  onSaveNotes: (id: string, notes: string) => Promise<void>;
+  onOpenProfile: (lead: Lead) => void;
+  isDragging: boolean;
+  onDragStart: (e: React.DragEvent, id: string) => void;
   onGoToSMS: (phone: string) => void;
 }) {
   const [notes, setNotes] = useState(lead.notes);
@@ -282,12 +331,8 @@ function LeadCard({
 
       {meeting && <div className="plMeetingChip">📅 {meeting}</div>}
 
-      {/* SMS link on card */}
       {lead.source === 'SMS' && lead.phone && (
-        <button
-          className="plCardSmsBtn"
-          onClick={e => { e.stopPropagation(); onGoToSMS(lead.phone!); }}
-        >
+        <button className="plCardSmsBtn" onClick={e => { e.stopPropagation(); onGoToSMS(lead.phone!); }}>
           💬 Open SMS convo
         </button>
       )}
@@ -296,7 +341,7 @@ function LeadCard({
         className="plNotesArea"
         value={notes}
         onChange={e => setNotes(e.target.value)}
-        onBlur={() => onUpdateNotes(lead.id, notes)}
+        onBlur={() => onSaveNotes(lead.id, notes)}
         onClick={e => e.stopPropagation()}
         placeholder="Add notes..."
         rows={2}
@@ -308,8 +353,13 @@ function LeadCard({
             {moveLabel}
           </button>
         )}
+        {lead.stage !== 'dead' && (
+          <button className="plMoveBtn plDeadBtnSm" onClick={e => { e.stopPropagation(); onMove(lead.id, 'dead'); }}>
+            Dead
+          </button>
+        )}
         <button className="plDeleteCardBtn" onClick={e => { e.stopPropagation(); if (confirm('Delete?')) onDelete(lead.id); }}>
-          Delete
+          ×
         </button>
       </div>
     </div>
@@ -319,26 +369,27 @@ function LeadCard({
 /* ─── Pipeline View ─── */
 export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => void }) {
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [profileLead, setProfileLead] = useState<Lead | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<Stage | null>(null);
 
-  useEffect(() => { setLeads(loadLeads()); }, []);
+  const loadLeads = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await apiGet();
+      setLeads(data);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load pipeline.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  function update(updated: Lead[]) { setLeads(updated); saveLeads(updated); }
-  function handleAdd(lead: Lead) { update([...leads, lead]); }
-  function handleMove(id: string, stage: Stage) { update(leads.map(l => l.id === id ? { ...l, stage } : l)); }
-  function handleDelete(id: string) { update(leads.filter(l => l.id !== id)); }
-  function handleUpdateNotes(id: string, notes: string) { update(leads.map(l => l.id === id ? { ...l, notes } : l)); }
-  function handleUpdateLead(updated: Lead) { update(leads.map(l => l.id === updated.id ? updated : l)); setProfileLead(updated); }
-
-  function goToSMS(phone: string) { onGoToSMS?.(phone); }
-
-  function onDragStart(e: React.DragEvent, id: string) { setDraggingId(id); e.dataTransfer.effectAllowed = 'move'; }
-  function onDragOver(e: React.DragEvent, stage: Stage) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverStage(stage); }
-  function onDrop(e: React.DragEvent, stage: Stage) { e.preventDefault(); if (draggingId) handleMove(draggingId, stage); setDraggingId(null); setDragOverStage(null); }
-  function onDragEnd() { setDraggingId(null); setDragOverStage(null); }
+  useEffect(() => { loadLeads(); }, [loadLeads]);
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -351,6 +402,63 @@ export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => voi
     return () => window.removeEventListener('keydown', handleKey);
   }, [showModal, profileLead]);
 
+  async function handleAdd(lead: Omit<Lead, 'rowNumber'>) {
+    // Optimistic: add locally first so it feels instant
+    const optimistic = { ...lead, rowNumber: -1 };
+    setLeads(prev => [...prev, optimistic]);
+    try {
+      const saved = await apiAdd(lead);
+      setLeads(prev => prev.map(l => l.id === lead.id ? saved : l));
+    } catch {
+      setLeads(prev => prev.filter(l => l.id !== lead.id));
+      alert('Failed to save lead. Try again.');
+    }
+  }
+
+  async function handleMove(id: string, stage: Stage) {
+    const lead = leads.find(l => l.id === id);
+    if (!lead) return;
+    const updated = { ...lead, stage };
+    setLeads(prev => prev.map(l => l.id === id ? updated : l));
+    try {
+      await apiUpdate(updated);
+    } catch {
+      setLeads(prev => prev.map(l => l.id === id ? lead : l));
+      alert('Failed to update lead.');
+    }
+  }
+
+  async function handleSave(updated: Lead) {
+    setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
+    if (profileLead?.id === updated.id) setProfileLead(updated);
+    await apiUpdate(updated);
+  }
+
+  async function handleSaveNotes(id: string, notes: string) {
+    const lead = leads.find(l => l.id === id);
+    if (!lead) return;
+    const updated = { ...lead, notes };
+    setLeads(prev => prev.map(l => l.id === id ? updated : l));
+    await apiUpdate(updated);
+  }
+
+  async function handleDelete(id: string) {
+    setLeads(prev => prev.filter(l => l.id !== id));
+    try {
+      await apiDelete(id);
+    } catch {
+      alert('Failed to delete lead. Refresh and try again.');
+      loadLeads();
+    }
+  }
+
+  function onDragStart(e: React.DragEvent, id: string) { setDraggingId(id); e.dataTransfer.effectAllowed = 'move'; }
+  function onDragOver(e: React.DragEvent, stage: Stage) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverStage(stage); }
+  function onDrop(e: React.DragEvent, stage: Stage) { e.preventDefault(); if (draggingId) handleMove(draggingId, stage); setDraggingId(null); setDragOverStage(null); }
+  function onDragEnd() { setDraggingId(null); setDragOverStage(null); }
+
+  function goToSMS(phone: string) { onGoToSMS?.(phone); }
+
   if (profileLead) {
     const live = leads.find(l => l.id === profileLead.id) || profileLead;
     return (
@@ -358,7 +466,7 @@ export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => voi
         <style>{css}</style>
         <LeadProfile
           lead={live} onBack={() => setProfileLead(null)}
-          onUpdate={handleUpdateLead} onMove={handleMove}
+          onSave={handleSave} onMove={handleMove}
           onDelete={handleDelete} onGoToSMS={goToSMS}
         />
       </>
@@ -372,18 +480,30 @@ export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => voi
         <div className="plTopBar">
           <div>
             <div className="plViewTitle">Pipeline</div>
-            <div className="plViewSub">Track leads from first contact to close. Press <kbd className="plKbd">N</kbd> to add.</div>
+            <div className="plViewSub">
+              {loading ? 'Loading…' : `${leads.length} leads · Press `}
+              {!loading && <kbd className="plKbd">N</kbd>}
+              {!loading && ' to add'}
+            </div>
           </div>
           <button className="plAddBtn" onClick={() => setShowModal(true)}>+ Add Lead</button>
         </div>
+
+        {error && <div className="plError">{error}</div>}
+
         <div className="plColumns">
           {STAGES.map(stage => {
             const stageLeads = leads.filter(l => l.stage === stage.id);
             const isOver = dragOverStage === stage.id;
             return (
-              <div key={stage.id} className={`plColumn${isOver ? ' plColumn--over' : ''}`}
-                onDragOver={e => onDragOver(e, stage.id)} onDrop={e => onDrop(e, stage.id)}
-                onDragLeave={() => setDragOverStage(null)} onDragEnd={onDragEnd}>
+              <div key={stage.id}
+                className={`plColumn${isOver ? ' plColumn--over' : ''}`}
+                style={{ '--col-color': stage.color } as React.CSSProperties}
+                onDragOver={e => onDragOver(e, stage.id)}
+                onDrop={e => onDrop(e, stage.id)}
+                onDragLeave={() => setDragOverStage(null)}
+                onDragEnd={onDragEnd}
+              >
                 <div className="plColHeader">
                   <span className="plColLabel">
                     <span className="plColDot" style={{ background: stage.color }} />
@@ -392,16 +512,22 @@ export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => voi
                   <span className="plColCount">{stageLeads.length}</span>
                 </div>
                 <div className="plColBody">
-                  {stageLeads.length === 0
+                  {loading
+                    ? <div className="plEmpty">Loading…</div>
+                    : stageLeads.length === 0
                     ? <div className="plEmpty">Drop leads here</div>
                     : stageLeads.map(lead => (
                       <LeadCard
-                        key={lead.id} lead={lead} onMove={handleMove}
-                        onDelete={handleDelete} onUpdateNotes={handleUpdateNotes}
-                        onOpenProfile={setProfileLead} isDragging={draggingId === lead.id}
-                        onDragStart={onDragStart} onGoToSMS={goToSMS}
+                        key={lead.id} lead={lead}
+                        onMove={handleMove} onDelete={handleDelete}
+                        onSaveNotes={handleSaveNotes}
+                        onOpenProfile={setProfileLead}
+                        isDragging={draggingId === lead.id}
+                        onDragStart={onDragStart}
+                        onGoToSMS={goToSMS}
                       />
-                    ))}
+                    ))
+                  }
                 </div>
               </div>
             );
@@ -419,12 +545,14 @@ const css = `
 .plViewTitle { font-size: 16px; font-weight: 600; color: #d4d4d3; }
 .plViewSub { font-size: 12px; color: #7a7a8a; margin-top: 2px; }
 .plKbd { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 4px; padding: 1px 5px; font-size: 11px; color: #a78bfa; font-family: inherit; }
-.plAddBtn { background: linear-gradient(90deg, #8b5cf6 0%, #60a5fa 100%); color: #fff; border: none; border-radius: 10px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 16px rgba(139,92,246,0.25); white-space: nowrap; }
+.plError { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.25); border-radius: 8px; padding: 10px 14px; color: #f87171; font-size: 13px; margin-bottom: 14px; }
+.plAddBtn { background: linear-gradient(90deg, #8b5cf6 0%, #60a5fa 100%); color: #fff; border: none; border-radius: 10px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 16px rgba(139,92,246,0.25); white-space: nowrap; font-family: inherit; }
 .plAddBtn:hover { opacity: 0.9; }
-.plColumns { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; align-items: start; }
-@media (max-width: 760px) { .plColumns { grid-template-columns: 1fr; } }
+.plColumns { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; align-items: start; }
+@media (max-width: 900px) { .plColumns { grid-template-columns: repeat(2,1fr); } }
+@media (max-width: 500px) { .plColumns { grid-template-columns: 1fr; } }
 .plColumn { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s; }
-.plColumn--over { border-color: rgba(139,92,246,0.5); box-shadow: 0 0 0 2px rgba(139,92,246,0.15); }
+.plColumn--over { border-color: var(--col-color, #8b5cf6); box-shadow: 0 0 0 2px color-mix(in srgb, var(--col-color, #8b5cf6) 20%, transparent); }
 .plColHeader { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.06); }
 .plColLabel { font-size: 13px; font-weight: 600; color: #d4d4d3; display: flex; align-items: center; gap: 8px; }
 .plColDot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
@@ -448,11 +576,13 @@ const css = `
 .plNotesArea { width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 6px; color: #d4d4d3; font-size: 12px; font-family: inherit; padding: 6px 8px; resize: vertical; margin-bottom: 8px; line-height: 1.5; }
 .plNotesArea::placeholder { color: rgba(255,255,255,0.2); }
 .plNotesArea:focus { outline: none; border-color: rgba(139,92,246,0.4); }
-.plCardActions { display: flex; align-items: center; justify-content: space-between; }
-.plMoveBtn { font-size: 11px; font-weight: 600; color: #c4b5fd; background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.25); border-radius: 6px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+.plCardActions { display: flex; align-items: center; gap: 6px; }
+.plMoveBtn { font-size: 11px; font-weight: 600; color: #c4b5fd; background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.25); border-radius: 6px; padding: 4px 10px; cursor: pointer; white-space: nowrap; font-family: inherit; flex: 1; }
 .plMoveBtn:hover { background: rgba(139,92,246,0.22); }
-.plMoveBtnLarge { width: 100%; padding: 12px; font-size: 14px; border-radius: 10px; text-align: center; font-family: inherit; }
-.plDeleteCardBtn { font-size: 11px; color: rgba(255,255,255,0.25); background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: 4px; }
+.plMoveBtnLarge { width: 100%; padding: 12px; font-size: 14px; border-radius: 10px; text-align: center; font-family: inherit; margin-bottom: 8px; }
+.plDeadBtnSm { background: rgba(239,68,68,0.1) !important; border-color: rgba(239,68,68,0.25) !important; color: #fca5a5 !important; flex: none !important; }
+.plDeadBtnSm:hover { background: rgba(239,68,68,0.2) !important; }
+.plDeleteCardBtn { font-size: 16px; color: rgba(255,255,255,0.2); background: none; border: none; cursor: pointer; padding: 2px 6px; border-radius: 4px; line-height: 1; margin-left: auto; }
 .plDeleteCardBtn:hover { color: #f87171; background: rgba(248,113,113,0.1); }
 .plProfile { padding: 20px; min-height: 100%; }
 .plProfileTopBar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
@@ -468,6 +598,9 @@ const css = `
 .plProfileBadges { display: flex; gap: 8px; align-items: center; flex-shrink: 0; flex-wrap: wrap; }
 .plStagePill { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 4px 12px; white-space: nowrap; }
 .plProfileSection { margin-bottom: 20px; }
+.plProfileActions { display: flex; flex-direction: column; gap: 8px; }
+.plDeadBtn { width: 100%; padding: 11px; font-size: 13px; font-weight: 600; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25); border-radius: 10px; color: #fca5a5; cursor: pointer; font-family: inherit; }
+.plDeadBtn:hover { background: rgba(239,68,68,0.18); }
 .plSectionLabel { font-size: 11px; font-weight: 700; color: #7a7a8a; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; }
 .plProfileNotes { width: 100%; box-sizing: border-box; font-size: 14px; line-height: 1.7; }
 .plSmsBtn { width: 100%; padding: 10px 14px; font-size: 13px; font-weight: 600; background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.25); border-radius: 10px; color: #93c5fd; cursor: pointer; font-family: inherit; text-align: left; }
@@ -490,7 +623,7 @@ const css = `
 .plTimeSelect { flex: 1.2; }
 .plMinSelect { flex: 0.9; }
 .plModalActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-.plBtnPrimary { background: linear-gradient(90deg, #8b5cf6 0%, #60a5fa 100%); color: #fff; border: none; border-radius: 8px; padding: 9px 20px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 14px rgba(139,92,246,0.3); font-family: inherit; }
+.plBtnPrimary { background: linear-gradient(90deg, #8b5cf6 0%, #60a5fa 100%); color: #fff; border: none; border-radius: 8px; padding: 9px 20px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
 .plBtnPrimary:hover:not(:disabled) { opacity: 0.9; }
 .plBtnPrimary:disabled { opacity: 0.4; cursor: not-allowed; }
 .plBtnSecondary { background: rgba(255,255,255,0.05); color: #7a7a8a; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 9px 20px; font-size: 13px; cursor: pointer; font-family: inherit; }
