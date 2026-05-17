@@ -21,7 +21,7 @@ export function ReplyBox({ phone, niche, onSent, disabled = false }: Props) {
     },
     {
       label: 'Message 3',
-      text: `Okay awesome. We run meta ads for ${nicheLabel} that bring in booked appointments and recently got a client 6 leads in 3 days at $6.77 a lead. We're offering a free 7 day trial right now where u just cover the ad spend and we handle everything. Would u be open to a quick call to see if it makes sense? If not say stop`,
+      text: `Okay so we actually run meta ads for ${nicheLabel} and just got a client 6 leads in 3 days at $6.77 a lead. Right now we're doing a free 7 day trial where u just cover the ad spend and we handle everything. Would u be open to a quick call to see if it makes sense? If not say stop`,
     },
   ];
 
