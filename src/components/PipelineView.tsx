@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 
-type Stage = 'needs-call' | 'meeting-booked' | 'closed' | 'dead';
+type Stage = 'needs-call' | 'meeting-booked' | 'free-trial' | 'monthly-retainer' | 'dead';
 type Source = 'SMS' | 'Instagram DM' | 'Cold Call';
 
 interface Lead {
@@ -21,24 +21,27 @@ interface Lead {
 }
 
 const STAGES: { id: Stage; label: string; color: string }[] = [
-  { id: 'needs-call',     label: 'Needs a Call',   color: '#a78bfa' },
-  { id: 'meeting-booked', label: 'Meeting Booked',  color: '#60a5fa' },
-  { id: 'closed',         label: 'Closed',          color: '#22c55e' },
-  { id: 'dead',           label: 'Dead',            color: '#ef4444' },
+  { id: 'needs-call',       label: 'Needs a Call',     color: '#a78bfa' },
+  { id: 'meeting-booked',   label: 'Meeting Booked',   color: '#60a5fa' },
+  { id: 'free-trial',       label: 'Free Trial',       color: '#22c55e' },
+  { id: 'monthly-retainer', label: 'Monthly Retainer', color: '#f59e0b' },
+  { id: 'dead',             label: 'Dead',             color: '#ef4444' },
 ];
 
 const NEXT_STAGE: Record<Stage, Stage | null> = {
-  'needs-call':     'meeting-booked',
-  'meeting-booked': 'closed',
-  'closed':         null,
-  'dead':           null,
+  'needs-call':       'meeting-booked',
+  'meeting-booked':   'free-trial',
+  'free-trial':       'monthly-retainer',
+  'monthly-retainer': null,
+  'dead':             null,
 };
 
 const MOVE_LABEL: Record<Stage, string | null> = {
-  'needs-call':     'Mark as Booked →',
-  'meeting-booked': 'Mark as Closed →',
-  'closed':         null,
-  'dead':           null,
+  'needs-call':       'Mark as Booked →',
+  'meeting-booked':   'Start Free Trial →',
+  'free-trial':       'Convert to Retainer →',
+  'monthly-retainer': null,
+  'dead':             null,
 };
 
 const HOURS = Array.from({ length: 17 }, (_, i) => {
@@ -403,7 +406,6 @@ export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => voi
   }, [showModal, profileLead]);
 
   async function handleAdd(lead: Omit<Lead, 'rowNumber'>) {
-    // Optimistic: add locally first so it feels instant
     const optimistic = { ...lead, rowNumber: -1 };
     setLeads(prev => [...prev, optimistic]);
     try {
@@ -457,8 +459,6 @@ export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => voi
   function onDrop(e: React.DragEvent, stage: Stage) { e.preventDefault(); if (draggingId) handleMove(draggingId, stage); setDraggingId(null); setDragOverStage(null); }
   function onDragEnd() { setDraggingId(null); setDragOverStage(null); }
 
-  function goToSMS(phone: string) { onGoToSMS?.(phone); }
-
   if (profileLead) {
     const live = leads.find(l => l.id === profileLead.id) || profileLead;
     return (
@@ -467,7 +467,7 @@ export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => voi
         <LeadProfile
           lead={live} onBack={() => setProfileLead(null)}
           onSave={handleSave} onMove={handleMove}
-          onDelete={handleDelete} onGoToSMS={goToSMS}
+          onDelete={handleDelete} onGoToSMS={(phone) => onGoToSMS?.(phone)}
         />
       </>
     );
@@ -524,7 +524,7 @@ export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => voi
                         onOpenProfile={setProfileLead}
                         isDragging={draggingId === lead.id}
                         onDragStart={onDragStart}
-                        onGoToSMS={goToSMS}
+                        onGoToSMS={(phone) => onGoToSMS?.(phone)}
                       />
                     ))
                   }
@@ -548,14 +548,15 @@ const css = `
 .plError { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.25); border-radius: 8px; padding: 10px 14px; color: #f87171; font-size: 13px; margin-bottom: 14px; }
 .plAddBtn { background: linear-gradient(90deg, #8b5cf6 0%, #60a5fa 100%); color: #fff; border: none; border-radius: 10px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 16px rgba(139,92,246,0.25); white-space: nowrap; font-family: inherit; }
 .plAddBtn:hover { opacity: 0.9; }
-.plColumns { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; align-items: start; }
-@media (max-width: 900px) { .plColumns { grid-template-columns: repeat(2,1fr); } }
-@media (max-width: 500px) { .plColumns { grid-template-columns: 1fr; } }
+.plColumns { display: grid; grid-template-columns: repeat(5,1fr); gap: 12px; align-items: start; }
+@media (max-width: 1100px) { .plColumns { grid-template-columns: repeat(3,1fr); } }
+@media (max-width: 700px) { .plColumns { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 460px) { .plColumns { grid-template-columns: 1fr; } }
 .plColumn { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s; }
-.plColumn--over { border-color: var(--col-color, #8b5cf6); box-shadow: 0 0 0 2px color-mix(in srgb, var(--col-color, #8b5cf6) 20%, transparent); }
+.plColumn--over { border-color: var(--col-color, #8b5cf6); box-shadow: 0 0 0 2px rgba(139,92,246,0.15); }
 .plColHeader { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-.plColLabel { font-size: 13px; font-weight: 600; color: #d4d4d3; display: flex; align-items: center; gap: 8px; }
-.plColDot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.plColLabel { font-size: 12px; font-weight: 600; color: #d4d4d3; display: flex; align-items: center; gap: 7px; }
+.plColDot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .plColCount { font-size: 11px; color: #7a7a8a; background: rgba(255,255,255,0.06); border-radius: 4px; padding: 2px 7px; }
 .plColBody { padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 100px; }
 .plEmpty { color: #7a7a8a; font-size: 12px; text-align: center; padding: 28px 0; border: 1px dashed rgba(255,255,255,0.08); border-radius: 8px; }
@@ -566,7 +567,7 @@ const css = `
 .plCardHeader { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; gap: 8px; }
 .plCardName { font-size: 13px; font-weight: 600; color: #d4d4d3; line-height: 1.3; }
 .plCardBusiness { font-size: 12px; color: #7a7a8a; margin-top: 2px; }
-.plSourceBadge { font-size: 10px; font-weight: 600; border-radius: 5px; padding: 2px 8px; white-space: nowrap; flex-shrink: 0; }
+.plSourceBadge { font-size: 10px; font-weight: 600; border-radius: 5px; padding: 2px 7px; white-space: nowrap; flex-shrink: 0; }
 .plSourceBadge--sms  { background: rgba(96,165,250,0.15); color: #93c5fd; border: 1px solid rgba(96,165,250,0.25); }
 .plSourceBadge--ig   { background: rgba(167,139,250,0.15); color: #c4b5fd; border: 1px solid rgba(167,139,250,0.25); }
 .plSourceBadge--call { background: rgba(34,197,94,0.12); color: #86efac; border: 1px solid rgba(34,197,94,0.22); }
@@ -576,13 +577,13 @@ const css = `
 .plNotesArea { width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 6px; color: #d4d4d3; font-size: 12px; font-family: inherit; padding: 6px 8px; resize: vertical; margin-bottom: 8px; line-height: 1.5; }
 .plNotesArea::placeholder { color: rgba(255,255,255,0.2); }
 .plNotesArea:focus { outline: none; border-color: rgba(139,92,246,0.4); }
-.plCardActions { display: flex; align-items: center; gap: 6px; }
-.plMoveBtn { font-size: 11px; font-weight: 600; color: #c4b5fd; background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.25); border-radius: 6px; padding: 4px 10px; cursor: pointer; white-space: nowrap; font-family: inherit; flex: 1; }
+.plCardActions { display: flex; align-items: center; gap: 5px; }
+.plMoveBtn { font-size: 10px; font-weight: 600; color: #c4b5fd; background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.25); border-radius: 6px; padding: 4px 8px; cursor: pointer; white-space: nowrap; font-family: inherit; flex: 1; }
 .plMoveBtn:hover { background: rgba(139,92,246,0.22); }
 .plMoveBtnLarge { width: 100%; padding: 12px; font-size: 14px; border-radius: 10px; text-align: center; font-family: inherit; margin-bottom: 8px; }
-.plDeadBtnSm { background: rgba(239,68,68,0.1) !important; border-color: rgba(239,68,68,0.25) !important; color: #fca5a5 !important; flex: none !important; }
+.plDeadBtnSm { background: rgba(239,68,68,0.1) !important; border-color: rgba(239,68,68,0.25) !important; color: #fca5a5 !important; flex: none !important; font-size: 10px !important; padding: 4px 7px !important; }
 .plDeadBtnSm:hover { background: rgba(239,68,68,0.2) !important; }
-.plDeleteCardBtn { font-size: 16px; color: rgba(255,255,255,0.2); background: none; border: none; cursor: pointer; padding: 2px 6px; border-radius: 4px; line-height: 1; margin-left: auto; }
+.plDeleteCardBtn { font-size: 16px; color: rgba(255,255,255,0.2); background: none; border: none; cursor: pointer; padding: 2px 5px; border-radius: 4px; line-height: 1; margin-left: auto; flex-shrink: 0; }
 .plDeleteCardBtn:hover { color: #f87171; background: rgba(248,113,113,0.1); }
 .plProfile { padding: 20px; min-height: 100%; }
 .plProfileTopBar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
