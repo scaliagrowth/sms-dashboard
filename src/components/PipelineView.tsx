@@ -59,6 +59,13 @@ const MINUTES = [
 
 function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
 
+function getMeetingTimestamp(lead: Lead): number {
+  if (!lead.meetingDate) return Infinity;
+  const h = (lead.meetingHour || '00').padStart(2, '0');
+  const m = (lead.meetingMinute || '00').padStart(2, '0');
+  return new Date(`${lead.meetingDate}T${h}:${m}:00`).getTime();
+}
+
 function fmtMeeting(lead: Lead) {
   const parts: string[] = [];
   if (lead.meetingDate) {
@@ -493,7 +500,10 @@ export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => voi
 
         <div className="plColumns">
           {STAGES.map(stage => {
-            const stageLeads = leads.filter(l => l.stage === stage.id);
+            let stageLeads = leads.filter(l => l.stage === stage.id);
+            if (stage.id === 'meeting-booked') {
+              stageLeads = [...stageLeads].sort((a, b) => getMeetingTimestamp(a) - getMeetingTimestamp(b));
+            }
             const isOver = dragOverStage === stage.id;
             return (
               <div key={stage.id}
