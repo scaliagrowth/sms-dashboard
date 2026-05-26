@@ -1,28 +1,54 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
-const COUNTIES: { name: string; area: string; priority: number }[] = [
-  { name: 'Camden County NJ',      area: '856', priority: 1 },
-  { name: 'Burlington County NJ',  area: '856', priority: 1 },
-  { name: 'Gloucester County NJ',  area: '856', priority: 1 },
-  { name: 'Salem County NJ',       area: '856', priority: 2 },
-  { name: 'Cumberland County NJ',  area: '856', priority: 2 },
-  { name: 'Atlantic County NJ',    area: '609', priority: 2 },
-  { name: 'Cape May County NJ',    area: '609', priority: 3 },
-  { name: 'Delaware County PA',    area: '610', priority: 2 },
-  { name: 'Chester County PA',     area: '610', priority: 2 },
-  { name: 'Philadelphia PA',       area: '215', priority: 3 },
-  { name: 'Bucks County PA',       area: '215', priority: 3 },
-  { name: 'Montgomery County PA',  area: '610', priority: 3 },
+// ─── Niche Groups ───────────────────────────────────────────────────────────
+interface NicheGroup {
+  id: string;
+  label: string;
+  terms: string[];
+}
+
+const DEFAULT_NICHES: NicheGroup[] = [
+  {
+    id: 'detailers',
+    label: 'Detailers',
+    terms: ['car detailing', 'auto detailing', 'mobile auto detailing', 'auto appearance', 'auto spa'],
+  },
+  {
+    id: 'coatings',
+    label: 'Coatings & Correction',
+    terms: ['ceramic coating', 'paint correction', 'ppf paint protection film', 'paint protection'],
+  },
+  {
+    id: 'tinting',
+    label: 'Tinting & PDR',
+    terms: ['window tinting auto', 'paintless dent repair', 'auto glass tinting'],
+  },
+  {
+    id: 'carwash',
+    label: 'Car Washes',
+    terms: ['car wash detailing', 'full service car wash', 'hand car wash'],
+  },
 ];
 
-const SEARCH_TERMS = [
-  'car detailing', 'auto detailing', 'mobile auto detailing',
-  'auto appearance', 'ceramic coating', 'paint correction',
-  'window tinting auto', 'paintless dent repair', 'auto spa', 'car wash detailing',
+// ─── Counties ───────────────────────────────────────────────────────────────
+const COUNTIES = [
+  { name: 'Camden County NJ',     area: '856', priority: 1 },
+  { name: 'Burlington County NJ', area: '856', priority: 1 },
+  { name: 'Gloucester County NJ', area: '856', priority: 1 },
+  { name: 'Salem County NJ',      area: '856', priority: 2 },
+  { name: 'Cumberland County NJ', area: '856', priority: 2 },
+  { name: 'Atlantic County NJ',   area: '609', priority: 2 },
+  { name: 'Cape May County NJ',   area: '609', priority: 3 },
+  { name: 'Delaware County PA',   area: '610', priority: 2 },
+  { name: 'Chester County PA',    area: '610', priority: 2 },
+  { name: 'Philadelphia PA',      area: '215', priority: 3 },
+  { name: 'Bucks County PA',      area: '215', priority: 3 },
+  { name: 'Montgomery County PA', area: '610', priority: 3 },
 ];
 
+// ─── Filtering ───────────────────────────────────────────────────────────────
 const CHAIN_BLACKLIST = [
   'walmart','autozone','advance auto','napa','midas','meineke',
   'caliber collision','mavis','pep boys','jiffy lube','firestone',
@@ -31,18 +57,16 @@ const CHAIN_BLACKLIST = [
   'dealership','honda','toyota','ford','chevy','bmw','mercedes','lexus',
   'nissan','hyundai','kia','volkswagen','subaru',
 ];
-
 const TOLL_FREE = ['800','833','844','855','866','877','888'];
 const VALID_AREAS = ['856','609','610','215','302','973','908','732','201','267','484','445'];
 
-function cleanPhone(raw: string | undefined | null): string | null {
+function cleanPhone(raw?: string | null): string | null {
   if (!raw) return null;
   let p = raw.toString().replace(/\D/g, '');
   if (p.startsWith('1') && p.length === 11) p = p.slice(1);
   if (p.length !== 10) return null;
   const area = p.slice(0, 3);
-  if (TOLL_FREE.includes(area)) return null;
-  if (!VALID_AREAS.includes(area)) return null;
+  if (TOLL_FREE.includes(area) || !VALID_AREAS.includes(area)) return null;
   return p;
 }
 
@@ -50,8 +74,7 @@ function cleanName(raw: string): string {
   return raw
     .replace(/\s*[-|]\s*.{3,60}$/, '')
     .replace(/\b(LLC|Inc\.?|Corp\.?|Co\.?|Ltd\.?)\b/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/\s+/g, ' ').trim();
 }
 
 function isChain(name: string): boolean {
@@ -72,36 +95,133 @@ function assignNiche(name: string, cats: string): string {
 function priorityScore(phone: string): number {
   const area = phone.slice(0, 3);
   if (area === '856') return 0;
-  if (['609', '610'].includes(area)) return 1;
-  if (['215', '484', '445'].includes(area)) return 2;
+  if (['609','610'].includes(area)) return 1;
+  if (['215','484','445'].includes(area)) return 2;
   return 3;
 }
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
+// ─── Types ───────────────────────────────────────────────────────────────────
 interface Lead { name: string; phone: string; niche: string; priority: number; }
-interface LogLine { time: string; msg: string; type: 'info' | 'success' | 'warn' | 'error'; }
+interface LogLine { time: string; msg: string; type: 'info'|'success'|'warn'|'error'; }
+interface ScrapeRecord { county: string; date: string; leads: number; }
 
+const HISTORY_KEY = 'scalia_scrape_history_v1';
+const NICHES_KEY  = 'scalia_niches_v1';
+
+function loadLS<T>(key: string, fallback: T): T {
+  if (typeof window === 'undefined') return fallback;
+  try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; }
+  catch { return fallback; }
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 export function LeadScrapingView() {
-  const [apiKey, setApiKey] = useState('ZDcxMzYyMjRkMDY5NDcwZGFjZGFjNzU3NzNkYjkxODh8MjExMmY0OGRlMQ');
+  const [apiKey, setApiKey]         = useState('ZDcxMzYyMjRkMDY5NDcwZGFjZGFjNzU3NzNkYjkxODh8MjExMmY0OGRlMQ');
   const [targetLeads, setTargetLeads] = useState(500);
-  const [crmPhones, setCrmPhones] = useState('');
+  const [crmPhones, setCrmPhones]   = useState('');
+
+  // Counties
   const [selectedCounties, setSelectedCounties] = useState<Set<number>>(
     new Set(COUNTIES.map((c, i) => c.priority <= 2 ? i : -1).filter(i => i >= 0))
   );
-  const [selectedTerms, setSelectedTerms] = useState<Set<number>>(new Set(SEARCH_TERMS.map((_, i) => i)));
-  const [running, setRunning] = useState(false);
-  const [logs, setLogs] = useState<LogLine[]>([]);
-  const [stats, setStats] = useState({ scraped: 0, filtered: 0, dupes: 0, final: 0 });
+
+  // Niches
+  const [niches, setNiches]             = useState<NicheGroup[]>(() => loadLS(NICHES_KEY, DEFAULT_NICHES));
+  const [selectedNiches, setSelectedNiches] = useState<Set<string>>(new Set(DEFAULT_NICHES.map(n => n.id)));
+  const [editingNiche, setEditingNiche] = useState<string | null>(null);
+  const [editLabel, setEditLabel]       = useState('');
+  const [editTerms, setEditTerms]       = useState('');
+  const [addingNiche, setAddingNiche]   = useState(false);
+  const [newNicheLabel, setNewNicheLabel] = useState('');
+  const [newNicheTerms, setNewNicheTerms] = useState('');
+
+  // Run state
+  const [running, setRunning]   = useState(false);
+  const [logs, setLogs]         = useState<LogLine[]>([]);
+  const [stats, setStats]       = useState({ scraped: 0, filtered: 0, dupes: 0, final: 0 });
   const [progress, setProgress] = useState(0);
-  const [output, setOutput] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [output, setOutput]     = useState('');
+  const [copied, setCopied]     = useState(false);
+
+  // History
+  const [history, setHistory]       = useState<ScrapeRecord[]>([]);
+  const [historyCopied, setHistoryCopied] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const logBoxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setHistory(loadLS<ScrapeRecord[]>(HISTORY_KEY, []));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(NICHES_KEY, JSON.stringify(niches));
+  }, [niches]);
+
+  useEffect(() => {
+    if (logBoxRef.current) logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight;
+  }, [logs]);
 
   function addLog(msg: string, type: LogLine['type'] = 'info') {
     const time = new Date().toLocaleTimeString('en-US', { hour12: false });
     setLogs(prev => [...prev, { time, msg, type }]);
   }
 
+  // ─── Niche editing ─────────────────────────────────────────────────────────
+  function startEditNiche(n: NicheGroup) {
+    setEditingNiche(n.id);
+    setEditLabel(n.label);
+    setEditTerms(n.terms.join(', '));
+  }
+
+  function saveEditNiche() {
+    if (!editingNiche) return;
+    setNiches(prev => prev.map(n => n.id === editingNiche
+      ? { ...n, label: editLabel.trim(), terms: editTerms.split(',').map(t => t.trim()).filter(Boolean) }
+      : n
+    ));
+    setEditingNiche(null);
+  }
+
+  function deleteNiche(id: string) {
+    setNiches(prev => prev.filter(n => n.id !== id));
+    setSelectedNiches(prev => { const s = new Set(prev); s.delete(id); return s; });
+  }
+
+  function addNiche() {
+    if (!newNicheLabel.trim() || !newNicheTerms.trim()) return;
+    const id = 'niche_' + Date.now();
+    const newN: NicheGroup = {
+      id,
+      label: newNicheLabel.trim(),
+      terms: newNicheTerms.split(',').map(t => t.trim()).filter(Boolean),
+    };
+    setNiches(prev => [...prev, newN]);
+    setSelectedNiches(prev => new Set([...prev, id]));
+    setNewNicheLabel('');
+    setNewNicheTerms('');
+    setAddingNiche(false);
+  }
+
+  function toggleNiche(id: string) {
+    setSelectedNiches(prev => {
+      const s = new Set(prev);
+      s.has(id) ? s.delete(id) : s.add(id);
+      return s;
+    });
+  }
+
+  function toggleCounty(i: number) {
+    setSelectedCounties(prev => {
+      const s = new Set(prev);
+      s.has(i) ? s.delete(i) : s.add(i);
+      return s;
+    });
+  }
+
+  // ─── Outscraper ────────────────────────────────────────────────────────────
   async function pollTask(taskId: string): Promise<Record<string, unknown>[]> {
     const start = Date.now();
     while (Date.now() - start < 120000) {
@@ -120,11 +240,8 @@ export function LeadScrapingView() {
   async function runSearch(query: string, location: string): Promise<Record<string, unknown>[]> {
     const params = new URLSearchParams({
       query: `${query} in ${location}`,
-      limit: '50',
-      language: 'en',
-      skip_closed: 'true',
-      enrichment: 'false',
-      fields: 'name,phone,category,full_address,state',
+      limit: '50', language: 'en', skip_closed: 'true',
+      enrichment: 'false', fields: 'name,phone,category,full_address,state',
     });
     const resp = await fetch(`https://api.app.outscraper.com/maps/search-v3?${params}`, {
       headers: { 'X-API-KEY': apiKey },
@@ -139,6 +256,7 @@ export function LeadScrapingView() {
     return [];
   }
 
+  // ─── Main run ──────────────────────────────────────────────────────────────
   async function startRun() {
     if (!apiKey.trim()) return;
     setRunning(true);
@@ -150,18 +268,25 @@ export function LeadScrapingView() {
     const crmSet = new Set<string>(
       crmPhones.split('\n').map(l => cleanPhone(l.trim())).filter(Boolean) as string[]
     );
+
+    // Build flat terms from selected niches
+    const allTerms: string[] = [];
+    niches.filter(n => selectedNiches.has(n.id)).forEach(n => allTerms.push(...n.terms));
+    const terms = [...new Set(allTerms)];
+
     const counties = COUNTIES.filter((_, i) => selectedCounties.has(i));
-    const terms = SEARCH_TERMS.filter((_, i) => selectedTerms.has(i));
     const total = counties.length * terms.length;
     let done = 0;
     const leads: Lead[] = [];
     const seenPhones = new Set<string>([...crmSet]);
     let scraped = 0, filtered = 0, dupes = 0;
+    const countyLeadCounts: Record<string, number> = {};
 
     addLog(`Starting: ${counties.length} counties × ${terms.length} terms`, 'info');
     addLog(`CRM dedup: ${crmSet.size} existing numbers`, 'info');
 
     for (const county of counties) {
+      countyLeadCounts[county.name] = 0;
       for (const term of terms) {
         if (leads.length >= targetLeads) {
           addLog(`Target of ${targetLeads} reached, stopping early`, 'success');
@@ -171,6 +296,7 @@ export function LeadScrapingView() {
           addLog(`Searching "${term}" in ${county.name}…`, 'info');
           const results = await runSearch(term, county.name);
           scraped += results.length;
+          let addedThisSearch = 0;
 
           for (const r of results) {
             const phone = cleanPhone(r.phone as string);
@@ -180,13 +306,14 @@ export function LeadScrapingView() {
             if (seenPhones.has(phone)) { dupes++; continue; }
             seenPhones.add(phone);
             leads.push({ name, phone, niche: assignNiche(r.name as string, (r.category as string) || ''), priority: priorityScore(phone) });
+            countyLeadCounts[county.name]++;
+            addedThisSearch++;
           }
 
           done++;
-          const pct = Math.round((done / total) * 100);
-          setProgress(pct);
+          setProgress(Math.round((done / total) * 100));
           setStats({ scraped, filtered, dupes, final: leads.length });
-          addLog(`  → ${results.length} scraped · ${leads.length} clean total`, 'success');
+          addLog(`  → ${results.length} scraped · +${addedThisSearch} clean · ${leads.length} total`, 'success');
         } catch (e) {
           addLog(`  ✗ ${county.name} / "${term}": ${(e as Error).message}`, 'error');
         }
@@ -194,6 +321,16 @@ export function LeadScrapingView() {
       }
       if (leads.length >= targetLeads) break;
     }
+
+    // Save history
+    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const newRecords: ScrapeRecord[] = counties
+      .filter(c => countyLeadCounts[c.name] > 0)
+      .map(c => ({ county: c.name, date: today, leads: countyLeadCounts[c.name] }));
+
+    const updatedHistory = [...newRecords, ...history];
+    setHistory(updatedHistory);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(updatedHistory));
 
     leads.sort((a, b) => a.priority - b.priority);
     setOutput(leads.map(l => `${l.name}\t${l.phone}\t${l.niche}`).join('\n'));
@@ -203,34 +340,38 @@ export function LeadScrapingView() {
     setRunning(false);
   }
 
+  // ─── History summary for Claude ────────────────────────────────────────────
+  function buildHistorySummary(): string {
+    if (!history.length) return 'No scrape history yet.';
+    const grouped: Record<string, { dates: string[]; leads: number }> = {};
+    history.forEach(r => {
+      if (!grouped[r.county]) grouped[r.county] = { dates: [], leads: 0 };
+      grouped[r.county].dates.push(r.date);
+      grouped[r.county].leads += r.leads;
+    });
+    const lines = Object.entries(grouped).map(([county, d]) =>
+      `${county} — ${d.leads} leads (last scraped ${d.dates[0]})`
+    );
+    return `Scalia lead scrape history:\n${lines.join('\n')}\n\nBased on this, what counties should I target next for my [AREA CODE] number, closest first?`;
+  }
+
+  function copyHistory() {
+    navigator.clipboard.writeText(buildHistorySummary());
+    setHistoryCopied(true);
+    setTimeout(() => setHistoryCopied(false), 2000);
+  }
+
   function copyOutput() {
     navigator.clipboard.writeText(output);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
-  function toggleCounty(i: number) {
-    setSelectedCounties(prev => {
-      const next = new Set(prev);
-      next.has(i) ? next.delete(i) : next.add(i);
-      return next;
-    });
-  }
+  const logColors = { info: '#7a7a8a', success: '#86efac', warn: '#fcd34d', error: '#f87171' };
 
-  function toggleTerm(i: number) {
-    setSelectedTerms(prev => {
-      const next = new Set(prev);
-      next.has(i) ? next.delete(i) : next.add(i);
-      return next;
-    });
-  }
-
-  const logColors: Record<LogLine['type'], string> = {
-    info: '#7a7a8a', success: '#86efac', warn: '#fcd34d', error: '#f87171',
-  };
-
+  // ─── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ padding: '20px', maxWidth: '1100px' }}>
+    <div style={{ padding: '20px', maxWidth: '1200px' }}>
       <style>{css}</style>
 
       {/* Header */}
@@ -239,46 +380,123 @@ export function LeadScrapingView() {
           <div className="ls-welcome-name">Lead Scraper</div>
           <div className="ls-welcome-sub">Outscraper → filtered → paste-ready CRM output</div>
         </div>
-        <div className="ls-welcome-badge">Outscraper API</div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button className="ls-history-btn" onClick={() => setShowHistory(v => !v)}>
+            {showHistory ? 'Hide History' : 'Scrape History'}
+          </button>
+          <div className="ls-welcome-badge">Outscraper API</div>
+        </div>
       </div>
 
+      {/* History panel */}
+      {showHistory && (
+        <div className="ls-panel" style={{ marginBottom: 14 }}>
+          <div className="ls-panel-header">
+            <span className="ls-panel-title">Scrape History</span>
+            <button className="ls-copy-btn" style={{ margin: 0 }} onClick={copyHistory}>
+              {historyCopied ? 'Copied!' : 'Copy for Claude →'}
+            </button>
+          </div>
+          <div className="ls-history-hint">
+            Hit "Copy for Claude", paste in any Claude chat — it'll tell you which counties to target next. Replace [AREA CODE] with your number's area code before sending.
+          </div>
+          {history.length === 0
+            ? <div className="ls-empty">No runs yet. History saves automatically after each scrape.</div>
+            : (
+              <div className="ls-history-list">
+                {history.map((r, i) => (
+                  <div key={i} className="ls-history-row">
+                    <span className="ls-history-county">{r.county}</span>
+                    <span className="ls-history-leads">{r.leads} leads</span>
+                    <span className="ls-history-date">{r.date}</span>
+                  </div>
+                ))}
+              </div>
+            )
+          }
+          {history.length > 0 && (
+            <button
+              className="ls-danger-btn"
+              style={{ marginTop: 10 }}
+              onClick={() => { setHistory([]); localStorage.removeItem(HISTORY_KEY); }}
+            >
+              Clear History
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="ls-two-col">
-        {/* LEFT — config */}
+        {/* LEFT */}
         <div className="ls-col">
 
-          {/* API + target */}
+          {/* Config */}
           <div className="ls-panel">
             <div className="ls-panel-header"><span className="ls-panel-title">Configuration</span></div>
             <div className="ls-field-row">
               <div className="ls-field">
                 <label className="ls-label">Outscraper API Key</label>
-                <input
-                  className="ls-input"
-                  type="password"
-                  value={apiKey}
-                  onChange={e => setApiKey(e.target.value)}
-                  placeholder="Paste your key…"
-                />
+                <input className="ls-input" type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Paste your key…" />
               </div>
               <div className="ls-field ls-field-sm">
                 <label className="ls-label">Target Leads</label>
-                <input
-                  className="ls-input"
-                  type="number"
-                  value={targetLeads}
-                  onChange={e => setTargetLeads(Number(e.target.value))}
-                  min={50} max={2000}
-                />
+                <input className="ls-input" type="number" value={targetLeads} onChange={e => setTargetLeads(Number(e.target.value))} min={50} max={2000} />
               </div>
             </div>
             <div className="ls-field" style={{ marginTop: 12 }}>
               <label className="ls-label">CRM Phone Numbers (paste col C — for dedup)</label>
-              <textarea
-                className="ls-input ls-textarea"
-                value={crmPhones}
-                onChange={e => setCrmPhones(e.target.value)}
-                placeholder={'2155551234\n8565559876\n…'}
-              />
+              <textarea className="ls-input ls-textarea" value={crmPhones} onChange={e => setCrmPhones(e.target.value)} placeholder={'2155551234\n8565559876\n…'} />
+            </div>
+          </div>
+
+          {/* Niches */}
+          <div className="ls-panel">
+            <div className="ls-panel-header">
+              <span className="ls-panel-title">Search by Niche</span>
+              <button className="ls-link" onClick={() => setAddingNiche(v => !v)}>+ Add Niche</button>
+            </div>
+
+            {/* Add niche form */}
+            {addingNiche && (
+              <div className="ls-edit-box" style={{ marginBottom: 12 }}>
+                <input className="ls-input" placeholder="Niche label (e.g. Coatings)" value={newNicheLabel} onChange={e => setNewNicheLabel(e.target.value)} style={{ marginBottom: 6 }} />
+                <input className="ls-input" placeholder="Terms, comma separated (e.g. ceramic coating, ppf)" value={newNicheTerms} onChange={e => setNewNicheTerms(e.target.value)} />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button className="ls-save-btn" onClick={addNiche}>Save</button>
+                  <button className="ls-cancel-btn" onClick={() => setAddingNiche(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
+
+            <div className="ls-niche-list">
+              {niches.map(n => (
+                <div key={n.id}>
+                  {editingNiche === n.id ? (
+                    <div className="ls-edit-box">
+                      <input className="ls-input" value={editLabel} onChange={e => setEditLabel(e.target.value)} style={{ marginBottom: 6 }} />
+                      <input className="ls-input" value={editTerms} onChange={e => setEditTerms(e.target.value)} placeholder="term1, term2, term3" />
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                        <button className="ls-save-btn" onClick={saveEditNiche}>Save</button>
+                        <button className="ls-cancel-btn" onClick={() => setEditingNiche(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={`ls-niche-card${selectedNiches.has(n.id) ? ' ls-niche-card--active' : ''}`}>
+                      <button className="ls-niche-toggle" onClick={() => toggleNiche(n.id)}>
+                        <div className="ls-niche-check">{selectedNiches.has(n.id) ? '✓' : ''}</div>
+                        <div>
+                          <div className="ls-niche-label">{n.label}</div>
+                          <div className="ls-niche-terms">{n.terms.join(' · ')}</div>
+                        </div>
+                      </button>
+                      <div className="ls-niche-actions">
+                        <button className="ls-icon-btn" onClick={() => startEditNiche(n)} title="Edit">✎</button>
+                        <button className="ls-icon-btn ls-icon-btn--danger" onClick={() => deleteNiche(n.id)} title="Delete">×</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 
@@ -290,11 +508,7 @@ export function LeadScrapingView() {
             </div>
             <div className="ls-county-grid">
               {COUNTIES.map((c, i) => (
-                <button
-                  key={i}
-                  className={`ls-chip${selectedCounties.has(i) ? ' ls-chip--active' : ''}`}
-                  onClick={() => toggleCounty(i)}
-                >
+                <button key={i} className={`ls-chip${selectedCounties.has(i) ? ' ls-chip--active' : ''}`} onClick={() => toggleCounty(i)}>
                   {c.name}
                   {c.area === '856' && <span className="ls-chip-badge">856</span>}
                 </button>
@@ -302,44 +516,21 @@ export function LeadScrapingView() {
             </div>
           </div>
 
-          {/* Search terms */}
-          <div className="ls-panel">
-            <div className="ls-panel-header">
-              <span className="ls-panel-title">Search Terms</span>
-              <span className="ls-muted">{selectedTerms.size} selected</span>
-            </div>
-            <div className="ls-terms-grid">
-              {SEARCH_TERMS.map((t, i) => (
-                <button
-                  key={i}
-                  className={`ls-chip${selectedTerms.has(i) ? ' ls-chip--active' : ''}`}
-                  onClick={() => toggleTerm(i)}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button
-            className="ls-run-btn"
-            onClick={startRun}
-            disabled={running}
-          >
+          <button className="ls-run-btn" onClick={startRun} disabled={running}>
             {running ? 'Running…' : 'Run Scraper'}
           </button>
         </div>
 
-        {/* RIGHT — progress + output */}
+        {/* RIGHT */}
         <div className="ls-col">
 
           {/* Stats */}
           <div className="ls-stat-grid">
             {[
-              { label: 'Scraped', val: stats.scraped, color: '#8b5cf6' },
-              { label: 'Filtered', val: stats.filtered, color: '#f59e0b' },
-              { label: 'Dupes', val: stats.dupes, color: '#60a5fa' },
-              { label: 'Final', val: stats.final, color: '#22c55e' },
+              { label: 'Scraped',  val: stats.scraped,   color: '#8b5cf6' },
+              { label: 'Filtered', val: stats.filtered,  color: '#f59e0b' },
+              { label: 'Dupes',    val: stats.dupes,     color: '#60a5fa' },
+              { label: 'Final',    val: stats.final,     color: '#22c55e' },
             ].map(s => (
               <div key={s.label} className="ls-stat-card" style={{ '--bar': s.color } as React.CSSProperties}>
                 <div className="ls-stat-bar" />
@@ -349,7 +540,7 @@ export function LeadScrapingView() {
             ))}
           </div>
 
-          {/* Progress bar */}
+          {/* Progress */}
           <div className="ls-panel" style={{ padding: '14px 18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
               <span className="ls-panel-title">Progress</span>
@@ -361,9 +552,9 @@ export function LeadScrapingView() {
           </div>
 
           {/* Log */}
-          <div className="ls-panel" style={{ flex: 1 }}>
+          <div className="ls-panel">
             <div className="ls-panel-header"><span className="ls-panel-title">Log</span></div>
-            <div className="ls-log">
+            <div className="ls-log" ref={logBoxRef}>
               {logs.length === 0 && <span style={{ color: '#4b5563', fontSize: 12 }}>Waiting to run…</span>}
               {logs.map((l, i) => (
                 <div key={i} className="ls-log-line">
@@ -382,15 +573,8 @@ export function LeadScrapingView() {
                 <span className="ls-badge-green">{stats.final} leads</span>
               </div>
               <div className="ls-output-hint">Click inside → Ctrl+A → Ctrl+C → paste into col B of your sheet</div>
-              <textarea
-                className="ls-input ls-output"
-                value={output}
-                readOnly
-                onClick={e => (e.target as HTMLTextAreaElement).select()}
-              />
-              <button className="ls-copy-btn" onClick={copyOutput}>
-                {copied ? 'Copied!' : 'Copy All to Clipboard'}
-              </button>
+              <textarea className="ls-input ls-output" value={output} readOnly onClick={e => (e.target as HTMLTextAreaElement).select()} />
+              <button className="ls-copy-btn" onClick={copyOutput}>{copied ? 'Copied!' : 'Copy All to Clipboard'}</button>
             </div>
           )}
         </div>
@@ -413,6 +597,12 @@ const css = `
   border-radius: 10px; padding: 7px 16px;
   font-size: 12px; font-weight: 700; color: #fff; white-space: nowrap; flex-shrink: 0;
 }
+.ls-history-btn {
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px; color: #d4d4d3; font-size: 12px; font-weight: 600;
+  font-family: inherit; padding: 7px 14px; cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.ls-history-btn:hover { border-color: rgba(139,92,246,0.4); color: #c4b5fd; }
 
 .ls-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
 @media (max-width: 900px) { .ls-two-col { grid-template-columns: 1fr; } }
@@ -422,11 +612,11 @@ const css = `
   background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
   border-radius: 16px; padding: 18px;
 }
-.ls-panel-header {
-  display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
-}
+.ls-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .ls-panel-title { font-size: 13px; font-weight: 700; color: #d4d4d3; }
 .ls-muted { font-size: 12px; color: #7a7a8a; }
+.ls-link { background: none; border: none; color: #a78bfa; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.ls-link:hover { color: #c4b5fd; }
 
 .ls-field-row { display: grid; grid-template-columns: 1fr 120px; gap: 10px; }
 .ls-field { display: flex; flex-direction: column; gap: 6px; }
@@ -439,11 +629,53 @@ const css = `
 .ls-input:focus { outline: none; border-color: rgba(139,92,246,0.45); }
 .ls-input::placeholder { color: #4b5563; }
 .ls-textarea { min-height: 80px; resize: vertical; font-size: 11px; }
-.ls-output { min-height: 160px; resize: vertical; font-size: 11px; font-family: 'SF Mono', 'Fira Code', monospace; }
+.ls-output { min-height: 160px; resize: vertical; font-size: 11px; font-family: 'SF Mono','Fira Code',monospace; }
 
-.ls-county-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
-.ls-terms-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.ls-niche-list { display: flex; flex-direction: column; gap: 8px; }
+.ls-niche-card {
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px; padding: 10px 12px; transition: all 0.15s;
+}
+.ls-niche-card--active {
+  background: rgba(124,106,247,0.1); border-color: rgba(139,92,246,0.3);
+}
+.ls-niche-toggle {
+  display: flex; align-items: center; gap: 10px; background: none; border: none;
+  cursor: pointer; font-family: inherit; text-align: left; flex: 1;
+}
+.ls-niche-check {
+  width: 18px; height: 18px; border-radius: 5px; flex-shrink: 0;
+  border: 1.5px solid rgba(139,92,246,0.4); background: rgba(139,92,246,0.08);
+  color: #a78bfa; font-size: 11px; display: flex; align-items: center; justify-content: center;
+}
+.ls-niche-card--active .ls-niche-check { background: rgba(139,92,246,0.25); border-color: #8b5cf6; }
+.ls-niche-label { font-size: 13px; font-weight: 600; color: #d4d4d3; }
+.ls-niche-terms { font-size: 11px; color: #7a7a8a; margin-top: 2px; }
+.ls-niche-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.ls-icon-btn {
+  background: none; border: none; color: #7a7a8a; font-size: 16px;
+  cursor: pointer; padding: 2px 6px; border-radius: 6px; transition: all 0.15s; font-family: inherit;
+}
+.ls-icon-btn:hover { background: rgba(255,255,255,0.06); color: #c4b5fd; }
+.ls-icon-btn--danger:hover { color: #f87171; background: rgba(248,113,113,0.08); }
 
+.ls-edit-box {
+  background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 0;
+}
+.ls-save-btn {
+  background: linear-gradient(90deg,#8b5cf6,#60a5fa); border: none; border-radius: 8px;
+  color: #fff; font-size: 12px; font-weight: 700; font-family: inherit;
+  padding: 7px 14px; cursor: pointer;
+}
+.ls-cancel-btn {
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 8px; color: #7a7a8a; font-size: 12px; font-family: inherit;
+  padding: 7px 14px; cursor: pointer;
+}
+
+.ls-county-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 6px; }
 .ls-chip {
   background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
   border-radius: 999px; color: #7a7a8a; font-size: 11px; font-family: inherit;
@@ -451,43 +683,32 @@ const css = `
   display: flex; align-items: center; gap: 6px;
 }
 .ls-chip:hover { border-color: rgba(139,92,246,0.3); color: #d4d4d3; }
-.ls-chip--active {
-  background: rgba(124,106,247,0.15); border-color: rgba(139,92,246,0.35); color: #c4b5fd;
-}
+.ls-chip--active { background: rgba(124,106,247,0.15); border-color: rgba(139,92,246,0.35); color: #c4b5fd; }
 .ls-chip-badge {
   background: rgba(139,92,246,0.25); border-radius: 4px;
   padding: 1px 5px; font-size: 9px; font-weight: 700; color: #a78bfa;
 }
 
 .ls-run-btn {
-  background: linear-gradient(90deg, #8b5cf6, #60a5fa);
-  border: none; border-radius: 14px; color: #fff;
-  font-size: 14px; font-weight: 700; font-family: inherit;
+  background: linear-gradient(90deg,#8b5cf6,#60a5fa); border: none; border-radius: 14px;
+  color: #fff; font-size: 14px; font-weight: 700; font-family: inherit;
   padding: 14px; cursor: pointer; width: 100%;
   box-shadow: 0 10px 24px rgba(139,92,246,0.22); transition: opacity 0.15s;
 }
 .ls-run-btn:hover { opacity: 0.9; }
 .ls-run-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-.ls-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.ls-stat-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
 .ls-stat-card {
   background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
   border-radius: 12px; padding: 14px 10px 10px; position: relative; overflow: hidden; text-align: center;
 }
-.ls-stat-bar {
-  position: absolute; top: 0; left: 0; right: 0; height: 3px;
-  background: var(--bar); border-radius: 12px 12px 0 0; opacity: 0.85;
-}
+.ls-stat-bar { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--bar); border-radius: 12px 12px 0 0; opacity: 0.85; }
 .ls-stat-val { font-size: 24px; font-weight: 800; color: #e8e8e7; line-height: 1; margin-bottom: 4px; }
 .ls-stat-lbl { font-size: 11px; font-weight: 600; color: #7a7a8a; }
 
-.ls-progress-wrap {
-  height: 8px; background: rgba(255,255,255,0.06); border-radius: 999px; overflow: hidden;
-}
-.ls-progress-fill {
-  height: 100%; border-radius: 999px;
-  background: linear-gradient(90deg, #8b5cf6, #60a5fa); transition: width 0.3s ease;
-}
+.ls-progress-wrap { height: 8px; background: rgba(255,255,255,0.06); border-radius: 999px; overflow: hidden; }
+.ls-progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg,#8b5cf6,#60a5fa); transition: width 0.3s ease; }
 
 .ls-log {
   background: rgba(0,0,0,0.25); border-radius: 10px; padding: 12px;
@@ -509,4 +730,22 @@ const css = `
   padding: 8px 16px; cursor: pointer; transition: background 0.15s;
 }
 .ls-copy-btn:hover { background: rgba(124,106,247,0.22); }
+
+.ls-history-hint { font-size: 11px; color: #7a7a8a; margin-bottom: 12px; line-height: 1.5; }
+.ls-history-list { display: flex; flex-direction: column; gap: 5px; max-height: 220px; overflow-y: auto; }
+.ls-history-row {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 8px; padding: 7px 12px;
+}
+.ls-history-county { flex: 1; font-size: 12px; color: #d4d4d3; }
+.ls-history-leads { font-size: 12px; font-weight: 700; color: #86efac; flex-shrink: 0; }
+.ls-history-date { font-size: 11px; color: #4b5563; flex-shrink: 0; width: 90px; text-align: right; }
+.ls-empty { font-size: 12px; color: #4b5563; text-align: center; padding: 16px 0; }
+.ls-danger-btn {
+  background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.25);
+  border-radius: 8px; color: #f87171; font-size: 11px; font-family: inherit;
+  padding: 6px 12px; cursor: pointer; transition: all 0.15s;
+}
+.ls-danger-btn:hover { background: rgba(248,113,113,0.2); }
 `;
