@@ -2,12 +2,13 @@ import { useState } from 'react';
 
 type Props = {
   phone: string | null;
+  ourNumber: string | null;
   niche?: string | null;
   onSent: () => Promise<void>;
   disabled?: boolean;
 };
 
-export function ReplyBox({ phone, niche, onSent, disabled = false }: Props) {
+export function ReplyBox({ phone, ourNumber, niche, onSent, disabled = false }: Props) {
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,11 +18,15 @@ export function ReplyBox({ phone, niche, onSent, disabled = false }: Props) {
   const presets = [
     {
       label: 'Message 2',
-      text: `Hey man my name is Ali, I work with local ${nicheLabel} and had a quick question. Are u booked out right now or do u have room for more jobs this month?`,
+      text: `Hey man my name is Ali. I run Meta ads for local ${nicheLabel} and just got a client 6 leads in 3 days at $6.77 a lead. We're offering a free 7 day trial right now where you just cover the ad spend and we handle everything. Would you be open to a quick call to see if it makes sense? If not say stop`,
     },
     {
-      label: 'Message 3',
-      text: `Okay so we actually run meta ads for ${nicheLabel} and just got a client 6 leads in 3 days at $6.77 a lead. Right now we're doing a free 7 day trial where u just cover the ad spend and we handle everything. Would u be open to a quick call to see if it makes sense? If not say stop`,
+      label: 'Variant 1',
+      text: ``, // TODO: add body here
+    },
+    {
+      label: 'Variant 2',
+      text: ``, // TODO: add body here
     },
   ];
 
@@ -34,7 +39,7 @@ export function ReplyBox({ phone, niche, onSent, disabled = false }: Props) {
         cache: 'no-store',
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, message }),
+        body: JSON.stringify({ phone, message, ourNumber }),
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -58,7 +63,8 @@ export function ReplyBox({ phone, niche, onSent, disabled = false }: Props) {
               key={preset.label}
               className="presetBtn"
               onClick={() => setMessage(preset.text)}
-              disabled={sending}
+              disabled={sending || !preset.text.trim()}
+              title={!preset.text.trim() ? 'No message set yet — update in ReplyBox.tsx' : undefined}
               type="button"
             >
               {preset.label}
