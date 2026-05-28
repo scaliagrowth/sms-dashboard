@@ -172,6 +172,17 @@ export function InboxLayout() {
           overflow-y: auto;
           min-height: 0;
         }
+        .ourNumberBadge {
+          display: inline-block;
+          background: rgba(139,92,246,0.15);
+          color: #a78bfa;
+          border: 1px solid rgba(139,92,246,0.3);
+          border-radius: 6px;
+          font-size: 11px;
+          font-weight: 600;
+          padding: 3px 8px;
+          margin-bottom: 4px;
+        }
       `}</style>
 
       <header className="app-header">
@@ -237,6 +248,7 @@ export function InboxLayout() {
               <ChatThread detail={detail} loading={loadingDetail} />
               <ReplyBox
                 phone={selectedPhone}
+                ourNumber={detail?.conversation.ourNumber ?? null}
                 niche={detail?.lead?.niche}
                 onSent={refreshSelectedConversation}
                 disabled={detail?.conversation.workflowStatus === 'dnc'}
