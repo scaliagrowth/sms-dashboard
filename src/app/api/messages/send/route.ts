@@ -10,12 +10,16 @@ export async function POST(request: Request) {
     const body = await request.json();
     const phone = String(body.phone ?? '').trim();
     const message = String(body.message ?? '').trim();
+    const ourNumber = String(body.ourNumber ?? '').trim();
 
     if (!phone || !message) {
       return NextResponse.json({ error: 'Phone and message are required.' }, { status: 400 });
     }
+    if (!ourNumber) {
+      return NextResponse.json({ error: 'ourNumber is required.' }, { status: 400 });
+    }
 
-    const result = await sendSms(phone, message);
+    const result = await sendSms(phone, message, ourNumber);
     const updatedLead = await updateLeadReply(phone, message);
 
     return NextResponse.json({
