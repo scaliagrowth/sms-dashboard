@@ -37,6 +37,7 @@ export type LeadWorkflowStatus = 'active' | 'follow-up' | 'closed' | 'dnc';
 export type ConversationSummary = {
   phone: string;
   normalizedPhone: string;
+  ourNumber: string | null;       // which of your Twilio numbers this convo is on
   businessName: string | null;
   niche: string | null;
   replied: string | null;
