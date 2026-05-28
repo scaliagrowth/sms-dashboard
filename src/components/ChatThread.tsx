@@ -9,9 +9,7 @@ type Props = {
 
 function getStatusLabel(message: MessageItem): string {
   if (message.direction === 'inbound') return 'Received';
-
   const status = (message.status || '').toLowerCase();
-
   switch (status) {
     case 'delivered':
       return 'Delivered';
@@ -42,7 +40,6 @@ export function ChatThread({ detail, loading }: Props) {
   if (loading) {
     return <section className="threadPanel emptyState">Loading conversation…</section>;
   }
-
   if (!detail) {
     return <section className="threadPanel emptyState">Select a conversation to view messages.</section>;
   }
@@ -55,11 +52,15 @@ export function ChatThread({ detail, loading }: Props) {
           <p>{formatPhoneDisplay(detail.conversation.phone)}</p>
         </div>
         <div className="threadHeaderStatus">
+          {detail.conversation.ourNumber && (
+            <span className="ourNumberBadge">
+              Sending from {formatPhoneDisplay(detail.conversation.ourNumber)}
+            </span>
+          )}
           <span className="threadHeaderHint">SMS status</span>
           <strong>Delivery only — no true read receipt</strong>
         </div>
       </div>
-
       <div ref={messageListRef} className="messageList">
         {detail.messages.length ? (
           detail.messages.map((message) => (
@@ -67,7 +68,12 @@ export function ChatThread({ detail, loading }: Props) {
               <div className={`messageBubble ${message.direction}`}>
                 <div className="messageBody">{message.body || '(empty message)'}</div>
                 <div className="messageMeta">
-                  <span>{message.direction === 'inbound' ? 'Lead' : 'You'} • {getStatusLabel(message)}</span>
+                  <span>
+                    {message.direction === 'inbound'
+                      ? 'Lead'
+                      : `You (${formatPhoneDisplay(message.from)})`}{' '}
+                    • {getStatusLabel(message)}
+                  </span>
                   <span>{new Date(message.dateCreated).toLocaleString()}</span>
                 </div>
               </div>
