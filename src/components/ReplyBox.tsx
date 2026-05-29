@@ -18,7 +18,7 @@ export function ReplyBox({ phone, ourNumber, niche, onSent, disabled = false }: 
   const presets = [
     {
       label: 'Message 2',
-      text: `Hey man my name is Ali. I run Meta ads for local ${nicheLabel} and just got a client 6 leads in 3 days at $6.77 a lead. We're offering a free 7 day trial right now where you just cover the ad spend and we handle everything. Would you be open to a quick call to see if it makes sense? If not say stop`,
+      text: ``Hey man my name is Ali. I run Meta ads for local ${nicheLabel} and just got a client 6 leads in 3 days at $6.77 a lead. I'm a student working with a small number of businesses right now and offering a free 7 day trial where u just cover the ad spend and we handle everything. Open to a quick call to see if it's a fit?``,
     },
     {
       label: 'Variant 1',
