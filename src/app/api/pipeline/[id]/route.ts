@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getPipelineLeads, updatePipelineLead, deletePipelineLead } from '@/lib/pipeline';
+import { updatePipelineLead, deletePipelineLead } from '@/lib/pipeline';
 
 export async function PUT(
   request: Request,
@@ -7,13 +7,8 @@ export async function PUT(
 ) {
   try {
     const body = await request.json();
-    const { rowNumber, ...rest } = body;
-
-    if (!rowNumber) {
-      return NextResponse.json({ error: 'Missing rowNumber.' }, { status: 400 });
-    }
-
-    await updatePipelineLead({ ...rest, id: params.id, rowNumber });
+    // rowNumber is ignored — pipeline.ts always looks it up fresh
+    await updatePipelineLead({ ...body, id: params.id });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('PUT /api/pipeline/[id] error:', error);
@@ -29,12 +24,8 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const leads = await getPipelineLeads();
-    const lead = leads.find((l) => l.id === params.id);
-    if (!lead) {
-      return NextResponse.json({ error: 'Lead not found.' }, { status: 404 });
-    }
-    await deletePipelineLead(lead.rowNumber);
+    // Pass the ID directly — pipeline.ts looks up the fresh rowNumber itself
+    await deletePipelineLead(params.id);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('DELETE /api/pipeline/[id] error:', error);
