@@ -3,11 +3,7 @@ import { google } from 'googleapis';
 const PIPELINE_SHEET = 'Pipeline';
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID!;
 
-// Column order in the Pipeline sheet (1-indexed, row 1 = headers)
-// A=ID, B=Name, C=Business, D=Phone, E=Source, F=Stage, G=Notes,
-// H=MeetingDate, I=MeetingHour, J=MeetingMinute, K=CreatedAt
-
-export type PipelineStage = 'needs-call' | 'meeting-booked' | 'closed' | 'dead';
+export type PipelineStage = 'needs-call' | 'meeting-booked' | 'free-trial' | 'monthly-retainer' | 'dead';
 export type PipelineSource = 'SMS' | 'Instagram DM' | 'Cold Call';
 
 export interface PipelineLead {
@@ -40,8 +36,7 @@ function getSheetsClient() {
     ) {
       normalized = normalized.slice(1, -1);
     }
-    normalized = normalized.replace(/\\n/g, '\n');
-    return normalized;
+    return normalized.replace(/\\n/g, '\n');
   }
 
   const auth = new google.auth.JWT({
@@ -100,11 +95,20 @@ export async function getPipelineLeads(): Promise<PipelineLead[]> {
     range: `${PIPELINE_SHEET}!A:K`,
   });
   const rows = res.data.values ?? [];
-  // Skip header row (row 1 = index 0), data starts at row 2
   return rows
     .slice(1)
     .map((row, i) => rowToLead(row, i + 2))
     .filter((l) => l.id);
+}
+
+/**
+ * Always fetches fresh from the sheet to get the current rowNumber.
+ * This prevents stale rowNumbers from corrupting data after deletes or adds.
+ */
+async function findCurrentRowNumber(id: string): Promise<number | null> {
+  const leads = await getPipelineLeads();
+  const lead = leads.find(l => l.id === id);
+  return lead ? lead.rowNumber : null;
 }
 
 export async function addPipelineLead(
@@ -132,7 +136,6 @@ export async function addPipelineLead(
     insertDataOption: 'INSERT_ROWS',
     requestBody: { values: [row] },
   });
-  // Figure out what row it landed on
   const updatedRange = appendRes.data.updates?.updatedRange ?? '';
   const match = updatedRange.match(/(\d+)$/);
   const rowNumber = match ? parseInt(match[1]) : -1;
@@ -140,9 +143,16 @@ export async function addPipelineLead(
 }
 
 export async function updatePipelineLead(
-  lead: Omit<PipelineLead, 'rowNumber'> & { rowNumber: number }
+  lead: Omit<PipelineLead, 'rowNumber'> & { rowNumber?: number }
 ): Promise<void> {
   const sheets = getSheetsClient();
+
+  // Always look up the fresh rowNumber by ID — never trust the one from frontend
+  const freshRowNumber = await findCurrentRowNumber(lead.id);
+  if (!freshRowNumber) {
+    throw new Error(`Lead ${lead.id} not found in sheet — cannot update.`);
+  }
+
   const row = [
     lead.id,
     lead.name,
@@ -156,22 +166,31 @@ export async function updatePipelineLead(
     lead.meetingMinute ?? '',
     lead.createdAt,
   ];
+
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${PIPELINE_SHEET}!A${lead.rowNumber}:K${lead.rowNumber}`,
+    range: `${PIPELINE_SHEET}!A${freshRowNumber}:K${freshRowNumber}`,
     valueInputOption: 'RAW',
     requestBody: { values: [row] },
   });
 }
 
-export async function deletePipelineLead(rowNumber: number): Promise<void> {
+export async function deletePipelineLead(id: string): Promise<void> {
   const sheets = getSheetsClient();
-  // Get the sheet ID for the Pipeline tab
+
+  // Always look up fresh rowNumber by ID
+  const freshRowNumber = await findCurrentRowNumber(id);
+  if (!freshRowNumber) {
+    throw new Error(`Lead ${id} not found in sheet — cannot delete.`);
+  }
+
   const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
   const sheet = meta.data.sheets?.find(
     (s) => s.properties?.title === PIPELINE_SHEET
   );
-  if (!sheet?.properties?.sheetId) throw new Error('Pipeline sheet not found');
+  if (!sheet?.properties?.sheetId && sheet?.properties?.sheetId !== 0) {
+    throw new Error('Pipeline sheet not found');
+  }
 
   await sheets.spreadsheets.batchUpdate({
     spreadsheetId: SPREADSHEET_ID,
@@ -182,8 +201,8 @@ export async function deletePipelineLead(rowNumber: number): Promise<void> {
             range: {
               sheetId: sheet.properties.sheetId,
               dimension: 'ROWS',
-              startIndex: rowNumber - 1,
-              endIndex: rowNumber,
+              startIndex: freshRowNumber - 1,
+              endIndex: freshRowNumber,
             },
           },
         },
