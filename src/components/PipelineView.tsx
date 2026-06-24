@@ -20,6 +20,11 @@ interface Lead {
   rowNumber: number;
 }
 
+interface SMSConvo {
+  phone: string;
+  businessName: string;
+}
+
 const STAGES: { id: Stage; label: string; color: string }[] = [
   { id: 'needs-call',       label: 'Needs a Call',     color: '#a78bfa' },
   { id: 'meeting-booked',   label: 'Meeting Booked',   color: '#60a5fa' },
@@ -75,49 +80,52 @@ function fmtMeeting(lead: Lead) {
   if (lead.meetingHour) {
     const h = parseInt(lead.meetingHour);
     const m = lead.meetingMinute || '00';
-    const label = h === 12 ? `12:${m} PM` : h < 12 ? `${h}:${m} AM` : `${h - 12}:${m} PM`;
-    parts.push(label);
+    parts.push(h === 12 ? `12:${m} PM` : h < 12 ? `${h}:${m} AM` : `${h - 12}:${m} PM`);
   }
   return parts.length ? parts.join(' at ') : null;
 }
 
 function sourceBadgeClass(source: Source) {
-  if (source === 'SMS') return 'plSourceBadge--sms';
-  if (source === 'Instagram DM') return 'plSourceBadge--ig';
-  return 'plSourceBadge--call';
+  if (source === 'SMS') return 'plSrc--sms';
+  if (source === 'Instagram DM') return 'plSrc--ig';
+  return 'plSrc--call';
 }
 
-/* ─── API helpers ─── */
+/* ─── API ─── */
 async function apiGet(): Promise<Lead[]> {
   const res = await fetch('/api/pipeline', { cache: 'no-store' });
   if (!res.ok) throw new Error('Failed to load pipeline.');
-  const data = await res.json();
-  return data.leads ?? [];
+  return (await res.json()).leads ?? [];
 }
-
 async function apiAdd(lead: Omit<Lead, 'rowNumber'>): Promise<Lead> {
   const res = await fetch('/api/pipeline', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(lead),
   });
   if (!res.ok) throw new Error('Failed to add lead.');
-  const data = await res.json();
-  return data.lead;
+  return (await res.json()).lead;
 }
-
 async function apiUpdate(lead: Lead): Promise<void> {
   const res = await fetch(`/api/pipeline/${lead.id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(lead),
   });
   if (!res.ok) throw new Error('Failed to update lead.');
 }
-
 async function apiDelete(id: string): Promise<void> {
   const res = await fetch(`/api/pipeline/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error('Failed to delete lead.');
+}
+async function fetchConvos(): Promise<SMSConvo[]> {
+  try {
+    const res = await fetch('/api/conversations', { cache: 'no-store' });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.conversations || []).map((c: any) => ({
+      phone: c.phone,
+      businessName: c.businessName || c.phone,
+    }));
+  } catch { return []; }
 }
 
 /* ─── Add Lead Modal ─── */
@@ -131,16 +139,34 @@ function AddLeadModal({ onAdd, onClose }: { onAdd: (l: Omit<Lead, 'rowNumber'>) 
   const [meetingDate, setMeetingDate] = useState('');
   const [meetingHour, setMeetingHour] = useState('09');
   const [meetingMinute, setMeetingMinute] = useState('00');
+  const [convos, setConvos] = useState<SMSConvo[]>([]);
+  const [convoSearch, setConvoSearch] = useState('');
+  const [loadingConvos, setLoadingConvos] = useState(false);
+
+  useEffect(() => {
+    if (source === 'SMS') {
+      setLoadingConvos(true);
+      fetchConvos().then(c => { setConvos(c); setLoadingConvos(false); });
+    }
+  }, [source]);
+
+  const filteredConvos = convos.filter(c =>
+    c.businessName.toLowerCase().includes(convoSearch.toLowerCase()) ||
+    c.phone.includes(convoSearch)
+  );
+
+  function selectConvo(c: SMSConvo) {
+    setPhone(c.phone);
+    if (!name) setName(c.businessName);
+    if (!business) setBusiness(c.businessName);
+    setConvoSearch(c.businessName);
+  }
 
   function submit() {
     if (!name.trim() || !business.trim()) return;
     onAdd({
-      id: uid(),
-      name: name.trim(),
-      business: business.trim(),
-      phone: phone.trim() || undefined,
-      source,
-      stage,
+      id: uid(), name: name.trim(), business: business.trim(),
+      phone: phone.trim() || undefined, source, stage,
       notes: notes.trim(),
       meetingDate: stage === 'meeting-booked' ? meetingDate : undefined,
       meetingHour: stage === 'meeting-booked' ? meetingHour : undefined,
@@ -157,34 +183,80 @@ function AddLeadModal({ onAdd, onClose }: { onAdd: (l: Omit<Lead, 'rowNumber'>) 
           <span className="plModalTitle">Add Lead</span>
           <button className="plModalClose" onClick={onClose}>×</button>
         </div>
+
         <div className="plField">
-          <label className="plLabel">Name *</label>
-          <input className="plInput" value={name} onChange={e => setName(e.target.value)} placeholder="John Smith" autoFocus />
+          <label className="plLabel">Source</label>
+          <div className="plSourcePicker">
+            {(['SMS', 'Instagram DM', 'Cold Call'] as Source[]).map(s => (
+              <button
+                key={s}
+                className={`plSourceBtn${source === s ? ' plSourceBtn--active' : ''}`}
+                onClick={() => setSource(s)}
+                type="button"
+              >
+                {s === 'SMS' ? '💬' : s === 'Instagram DM' ? '📸' : '📞'} {s}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="plField">
-          <label className="plLabel">Business *</label>
-          <input className="plInput" value={business} onChange={e => setBusiness(e.target.value)} placeholder="Smith's Auto Detail" />
-        </div>
-        <div className="plField">
-          <label className="plLabel">Phone (optional)</label>
-          <input className="plInput" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+1 (555) 000-0000" />
-        </div>
+
+        {source === 'SMS' && (
+          <div className="plField">
+            <label className="plLabel">Link SMS Conversation</label>
+            <input
+              className="plInput"
+              placeholder="Search by business name or phone…"
+              value={convoSearch}
+              onChange={e => { setConvoSearch(e.target.value); if (!e.target.value) setPhone(''); }}
+            />
+            {convoSearch && !phone && (
+              <div className="plConvoList">
+                {loadingConvos ? (
+                  <div className="plConvoEmpty">Loading conversations…</div>
+                ) : filteredConvos.length === 0 ? (
+                  <div className="plConvoEmpty">No matches found</div>
+                ) : filteredConvos.slice(0, 6).map(c => (
+                  <button key={c.phone} className="plConvoItem" onClick={() => selectConvo(c)} type="button">
+                    <span className="plConvoName">{c.businessName}</span>
+                    <span className="plConvoPhone">{c.phone}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {phone && (
+              <div className="plConvoSelected">
+                ✓ Linked to {phone}
+                <button className="plConvoUnlink" onClick={() => { setPhone(''); setConvoSearch(''); }} type="button">×</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {source !== 'SMS' && (
+          <div className="plField">
+            <label className="plLabel">Phone (optional)</label>
+            <input className="plInput" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+1 (555) 000-0000" />
+          </div>
+        )}
+
         <div className="plRow">
           <div className="plField">
-            <label className="plLabel">Source</label>
-            <select className="plSelect" value={source} onChange={e => setSource(e.target.value as Source)}>
-              <option value="SMS">SMS</option>
-              <option value="Instagram DM">Instagram DM</option>
-              <option value="Cold Call">Cold Call</option>
-            </select>
+            <label className="plLabel">Name *</label>
+            <input className="plInput" value={name} onChange={e => setName(e.target.value)} placeholder="John Smith" autoFocus />
           </div>
           <div className="plField">
-            <label className="plLabel">Stage</label>
-            <select className="plSelect" value={stage} onChange={e => setStage(e.target.value as Stage)}>
-              {STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
+            <label className="plLabel">Business *</label>
+            <input className="plInput" value={business} onChange={e => setBusiness(e.target.value)} placeholder="Smith's Detail" />
           </div>
         </div>
+
+        <div className="plField">
+          <label className="plLabel">Stage</label>
+          <select className="plSelect" value={stage} onChange={e => setStage(e.target.value as Stage)}>
+            {STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+        </div>
+
         {stage === 'meeting-booked' && (
           <div className="plField">
             <label className="plLabel">Meeting Date &amp; Time</label>
@@ -199,10 +271,12 @@ function AddLeadModal({ onAdd, onClose }: { onAdd: (l: Omit<Lead, 'rowNumber'>) 
             </div>
           </div>
         )}
+
         <div className="plField">
           <label className="plLabel">Notes</label>
-          <textarea className="plTextarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any context on this lead..." rows={3} />
+          <textarea className="plTextarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any context…" rows={3} />
         </div>
+
         <div className="plModalActions">
           <button className="plBtnSecondary" onClick={onClose}>Cancel</button>
           <button className="plBtnPrimary" onClick={submit} disabled={!name.trim() || !business.trim()}>Add Lead</button>
@@ -213,9 +287,7 @@ function AddLeadModal({ onAdd, onClose }: { onAdd: (l: Omit<Lead, 'rowNumber'>) 
 }
 
 /* ─── Lead Profile ─── */
-function LeadProfile({
-  lead, onBack, onSave, onMove, onDelete, onGoToSMS,
-}: {
+function LeadProfile({ lead, onBack, onSave, onMove, onDelete, onGoToSMS }: {
   lead: Lead; onBack: () => void;
   onSave: (l: Lead) => Promise<void>;
   onMove: (id: string, stage: Stage) => Promise<void>;
@@ -232,24 +304,16 @@ function LeadProfile({
   const nextStage = NEXT_STAGE[lead.stage];
   const moveLabel = MOVE_LABEL[lead.stage];
 
-  async function saveNotes() {
-    setSaving(true);
-    await onSave({ ...lead, notes });
-    setSaving(false);
-  }
-  async function saveMeeting() {
-    setSaving(true);
-    await onSave({ ...lead, meetingDate, meetingHour, meetingMinute });
-    setSaving(false);
-  }
+  async function saveNotes() { setSaving(true); await onSave({ ...lead, notes }); setSaving(false); }
+  async function saveMeeting() { setSaving(true); await onSave({ ...lead, meetingDate, meetingHour, meetingMinute }); setSaving(false); }
 
   return (
     <div className="plProfile">
       <div className="plProfileTopBar">
-        <button className="plBackBtn" onClick={onBack}>← Back to Pipeline</button>
-        <button className="plDeleteBtn" onClick={async () => {
-          if (confirm('Delete this lead?')) { await onDelete(lead.id); onBack(); }
-        }}>Delete lead</button>
+        <button className="plBackBtn" onClick={onBack}>← Pipeline</button>
+        <button className="plDeleteBtn" onClick={async () => { if (confirm('Delete this lead?')) { await onDelete(lead.id); onBack(); } }}>
+          Delete
+        </button>
       </div>
       <div className="plProfileCard">
         <div className="plProfileHeader">
@@ -259,7 +323,7 @@ function LeadProfile({
             {lead.phone && <div className="plProfilePhone">{lead.phone}</div>}
           </div>
           <div className="plProfileBadges">
-            <span className={`plSourceBadge ${sourceBadgeClass(lead.source)}`}>{lead.source}</span>
+            <span className={`plSrc ${sourceBadgeClass(lead.source)}`}>{lead.source}</span>
             <span className="plStagePill" style={{ background: stageInfo.color + '22', color: stageInfo.color, border: `1px solid ${stageInfo.color}44` }}>
               {stageInfo.label}
             </span>
@@ -276,7 +340,7 @@ function LeadProfile({
 
         {lead.stage === 'meeting-booked' && (
           <div className="plProfileSection">
-            <div className="plSectionLabel">Meeting date &amp; time</div>
+            <div className="plSectionLabel">Meeting</div>
             <div className="plTimeRow">
               <input className="plInput plDateInput" type="date" value={meetingDate} onChange={e => setMeetingDate(e.target.value)} onBlur={saveMeeting} />
               <select className="plSelect plTimeSelect" value={meetingHour} onChange={e => setMeetingHour(e.target.value)} onBlur={saveMeeting}>
@@ -291,7 +355,7 @@ function LeadProfile({
 
         <div className="plProfileSection">
           <div className="plSectionLabel">Notes {saving ? '· Saving…' : ''}</div>
-          <textarea className="plTextarea plProfileNotes" value={notes} onChange={e => setNotes(e.target.value)} onBlur={saveNotes} placeholder="Add notes about this lead..." rows={10} />
+          <textarea className="plTextarea plProfileNotes" value={notes} onChange={e => setNotes(e.target.value)} onBlur={saveNotes} placeholder="Add notes…" rows={10} />
         </div>
 
         <div className="plProfileActions">
@@ -312,9 +376,7 @@ function LeadProfile({
 }
 
 /* ─── Lead Card ─── */
-function LeadCard({
-  lead, onMove, onDelete, onSaveNotes, onOpenProfile, isDragging, onDragStart, onGoToSMS,
-}: {
+function LeadCard({ lead, onMove, onDelete, onSaveNotes, onOpenProfile, isDragging, onDragStart, onGoToSMS }: {
   lead: Lead;
   onMove: (id: string, stage: Stage) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -330,20 +392,36 @@ function LeadCard({
   const meeting = fmtMeeting(lead);
 
   return (
-    <div className={`plCard${isDragging ? ' plCard--dragging' : ''}`} draggable onDragStart={e => onDragStart(e, lead.id)}>
-      <div className="plCardHeader" onClick={() => onOpenProfile(lead)} style={{ cursor: 'pointer' }}>
-        <div>
+    <div
+      className={`plCard${isDragging ? ' plCard--dragging' : ''}`}
+      draggable
+      onDragStart={e => onDragStart(e, lead.id)}
+    >
+      {/* Card header — clickable to open profile */}
+      <div className="plCardHeader" onClick={() => onOpenProfile(lead)}>
+        <div className="plCardMeta">
           <div className="plCardName">{lead.name}</div>
           <div className="plCardBusiness">{lead.business}</div>
         </div>
-        <span className={`plSourceBadge ${sourceBadgeClass(lead.source)}`}>{lead.source}</span>
+        <div className="plCardHeaderRight">
+          <span className={`plSrc ${sourceBadgeClass(lead.source)}`}>
+            {lead.source === 'SMS' ? '💬' : lead.source === 'Instagram DM' ? '📸' : '📞'}
+          </span>
+          {lead.stage !== 'dead' && (
+            <button
+              className="plCardDeadX"
+              onClick={e => { e.stopPropagation(); onMove(lead.id, 'dead'); }}
+              title="Mark as Dead"
+            >×</button>
+          )}
+        </div>
       </div>
 
       {meeting && <div className="plMeetingChip">📅 {meeting}</div>}
 
       {lead.source === 'SMS' && lead.phone && (
         <button className="plCardSmsBtn" onClick={e => { e.stopPropagation(); onGoToSMS(lead.phone!); }}>
-          💬 Open SMS convo
+          💬 SMS convo
         </button>
       )}
 
@@ -353,23 +431,20 @@ function LeadCard({
         onChange={e => setNotes(e.target.value)}
         onBlur={() => onSaveNotes(lead.id, notes)}
         onClick={e => e.stopPropagation()}
-        placeholder="Add notes..."
+        placeholder="Notes…"
         rows={2}
       />
 
-      <div className="plCardActions">
-        {nextStage && moveLabel && (
+      <div className="plCardFooter">
+        {nextStage && moveLabel ? (
           <button className="plMoveBtn" onClick={e => { e.stopPropagation(); onMove(lead.id, nextStage); }}>
             {moveLabel}
           </button>
+        ) : (
+          <span />
         )}
-        {lead.stage !== 'dead' && (
-          <button className="plMoveBtn plDeadBtnSm" onClick={e => { e.stopPropagation(); onMove(lead.id, 'dead'); }}>
-            Dead
-          </button>
-        )}
-        <button className="plDeleteCardBtn" onClick={e => { e.stopPropagation(); if (confirm('Delete?')) onDelete(lead.id); }}>
-          ×
+        <button className="plCardDeleteBtn" onClick={e => { e.stopPropagation(); if (confirm('Delete?')) onDelete(lead.id); }}>
+          Delete
         </button>
       </div>
     </div>
@@ -389,8 +464,7 @@ export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => voi
   const loadLeads = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await apiGet();
-      setLeads(data);
+      setLeads(await apiGet());
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load pipeline.');
@@ -429,12 +503,8 @@ export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => voi
     if (!lead) return;
     const updated = { ...lead, stage };
     setLeads(prev => prev.map(l => l.id === id ? updated : l));
-    try {
-      await apiUpdate(updated);
-    } catch {
-      setLeads(prev => prev.map(l => l.id === id ? lead : l));
-      alert('Failed to update lead.');
-    }
+    try { await apiUpdate(updated); }
+    catch { setLeads(prev => prev.map(l => l.id === id ? lead : l)); alert('Failed to update.'); }
   }
 
   async function handleSave(updated: Lead) {
@@ -453,12 +523,8 @@ export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => voi
 
   async function handleDelete(id: string) {
     setLeads(prev => prev.filter(l => l.id !== id));
-    try {
-      await apiDelete(id);
-    } catch {
-      alert('Failed to delete lead. Refresh and try again.');
-      loadLeads();
-    }
+    try { await apiDelete(id); }
+    catch { alert('Failed to delete. Refresh and try again.'); loadLeads(); }
   }
 
   function onDragStart(e: React.DragEvent, id: string) { setDraggingId(id); e.dataTransfer.effectAllowed = 'move'; }
@@ -471,11 +537,8 @@ export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => voi
     return (
       <>
         <style>{css}</style>
-        <LeadProfile
-          lead={live} onBack={() => setProfileLead(null)}
-          onSave={handleSave} onMove={handleMove}
-          onDelete={handleDelete} onGoToSMS={(phone) => onGoToSMS?.(phone)}
-        />
+        <LeadProfile lead={live} onBack={() => setProfileLead(null)} onSave={handleSave}
+          onMove={handleMove} onDelete={handleDelete} onGoToSMS={p => onGoToSMS?.(p)} />
       </>
     );
   }
@@ -488,9 +551,8 @@ export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => voi
           <div>
             <div className="plViewTitle">Pipeline</div>
             <div className="plViewSub">
-              {loading ? 'Loading…' : `${leads.length} leads · Press `}
-              {!loading && <kbd className="plKbd">N</kbd>}
-              {!loading && ' to add'}
+              {loading ? 'Loading…' : `${leads.length} leads`}
+              {!loading && <> · Press <kbd className="plKbd">N</kbd> to add</>}
             </div>
           </div>
           <button className="plAddBtn" onClick={() => setShowModal(true)}>+ Add Lead</button>
@@ -514,30 +576,20 @@ export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => voi
                 onDragLeave={() => setDragOverStage(null)}
                 onDragEnd={onDragEnd}
               >
-                <div className="plColHeader">
-                  <span className="plColLabel">
-                    <span className="plColDot" style={{ background: stage.color }} />
-                    {stage.label}
-                  </span>
-                  <span className="plColCount">{stageLeads.length}</span>
+                <div className="plColHeader" style={{ borderTop: `3px solid ${stage.color}` }}>
+                  <span className="plColLabel">{stage.label}</span>
+                  <span className="plColCount" style={{ color: stage.color }}>{stageLeads.length}</span>
                 </div>
                 <div className="plColBody">
-                  {loading
-                    ? <div className="plEmpty">Loading…</div>
-                    : stageLeads.length === 0
-                    ? <div className="plEmpty">Drop leads here</div>
+                  {loading ? <div className="plEmpty">Loading…</div>
+                    : stageLeads.length === 0 ? <div className="plEmpty">Drop here</div>
                     : stageLeads.map(lead => (
-                      <LeadCard
-                        key={lead.id} lead={lead}
+                      <LeadCard key={lead.id} lead={lead}
                         onMove={handleMove} onDelete={handleDelete}
-                        onSaveNotes={handleSaveNotes}
-                        onOpenProfile={setProfileLead}
-                        isDragging={draggingId === lead.id}
-                        onDragStart={onDragStart}
-                        onGoToSMS={(phone) => onGoToSMS?.(phone)}
-                      />
-                    ))
-                  }
+                        onSaveNotes={handleSaveNotes} onOpenProfile={setProfileLead}
+                        isDragging={draggingId === lead.id} onDragStart={onDragStart}
+                        onGoToSMS={p => onGoToSMS?.(p)} />
+                    ))}
                 </div>
               </div>
             );
@@ -551,92 +603,165 @@ export function PipelineView({ onGoToSMS }: { onGoToSMS?: (phone: string) => voi
 
 const css = `
 .plView { padding: 20px; min-height: 100%; }
-.plTopBar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-.plViewTitle { font-size: 16px; font-weight: 600; color: #d4d4d3; }
+.plTopBar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.plViewTitle { font-size: 16px; font-weight: 700; color: #e8e8e7; }
 .plViewSub { font-size: 12px; color: #7a7a8a; margin-top: 2px; }
-.plKbd { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 4px; padding: 1px 5px; font-size: 11px; color: #a78bfa; font-family: inherit; }
-.plError { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.25); border-radius: 8px; padding: 10px 14px; color: #f87171; font-size: 13px; margin-bottom: 14px; }
-.plAddBtn { background: linear-gradient(90deg, #8b5cf6 0%, #60a5fa 100%); color: #fff; border: none; border-radius: 10px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 16px rgba(139,92,246,0.25); white-space: nowrap; font-family: inherit; }
+.plKbd { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 4px; padding: 1px 5px; font-size: 10px; color: #a78bfa; font-family: inherit; }
+.plAddBtn { background: linear-gradient(90deg, #8b5cf6, #60a5fa); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; box-shadow: 0 3px 12px rgba(139,92,246,0.25); }
 .plAddBtn:hover { opacity: 0.9; }
-.plColumns { display: grid; grid-template-columns: repeat(5,1fr); gap: 12px; align-items: start; }
+.plError { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.2); border-radius: 8px; padding: 10px 14px; color: #f87171; font-size: 12px; margin-bottom: 14px; }
+
+.plColumns { display: grid; grid-template-columns: repeat(5,1fr); gap: 10px; align-items: start; }
 @media (max-width: 1100px) { .plColumns { grid-template-columns: repeat(3,1fr); } }
 @media (max-width: 700px) { .plColumns { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 460px) { .plColumns { grid-template-columns: 1fr; } }
-.plColumn { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s; }
-.plColumn--over { border-color: var(--col-color, #8b5cf6); box-shadow: 0 0 0 2px rgba(139,92,246,0.15); }
-.plColHeader { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-.plColLabel { font-size: 12px; font-weight: 600; color: #d4d4d3; display: flex; align-items: center; gap: 7px; }
-.plColDot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-.plColCount { font-size: 11px; color: #7a7a8a; background: rgba(255,255,255,0.06); border-radius: 4px; padding: 2px 7px; }
-.plColBody { padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 100px; }
-.plEmpty { color: #7a7a8a; font-size: 12px; text-align: center; padding: 28px 0; border: 1px dashed rgba(255,255,255,0.08); border-radius: 8px; }
-.plCard { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; cursor: grab; transition: opacity 0.15s, box-shadow 0.15s; user-select: none; }
+
+.plColumn {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px; overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.plColumn--over { border-color: var(--col-color, #8b5cf6); box-shadow: 0 0 0 2px rgba(139,92,246,0.12); }
+.plColHeader {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-top-left-radius: 11px; border-top-right-radius: 11px;
+}
+.plColLabel { font-size: 11px; font-weight: 700; color: #d4d4d3; text-transform: uppercase; letter-spacing: 0.05em; }
+.plColCount { font-size: 13px; font-weight: 800; }
+.plColBody { padding: 8px; display: flex; flex-direction: column; gap: 6px; min-height: 80px; }
+.plEmpty { color: #4b5563; font-size: 11px; text-align: center; padding: 24px 0; border: 1px dashed rgba(255,255,255,0.06); border-radius: 8px; }
+
+.plCard {
+  background: rgba(255,255,255,0.035);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 9px; padding: 10px;
+  cursor: grab; user-select: none;
+  transition: box-shadow 0.12s, opacity 0.12s;
+}
 .plCard:active { cursor: grabbing; }
-.plCard--dragging { opacity: 0.35; }
-.plCard:hover { box-shadow: 0 4px 18px rgba(0,0,0,0.35); }
-.plCardHeader { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; gap: 8px; }
-.plCardName { font-size: 13px; font-weight: 600; color: #d4d4d3; line-height: 1.3; }
-.plCardBusiness { font-size: 12px; color: #7a7a8a; margin-top: 2px; }
-.plSourceBadge { font-size: 10px; font-weight: 600; border-radius: 5px; padding: 2px 7px; white-space: nowrap; flex-shrink: 0; }
-.plSourceBadge--sms  { background: rgba(96,165,250,0.15); color: #93c5fd; border: 1px solid rgba(96,165,250,0.25); }
-.plSourceBadge--ig   { background: rgba(167,139,250,0.15); color: #c4b5fd; border: 1px solid rgba(167,139,250,0.25); }
-.plSourceBadge--call { background: rgba(34,197,94,0.12); color: #86efac; border: 1px solid rgba(34,197,94,0.22); }
-.plMeetingChip { font-size: 11px; color: #93c5fd; margin-bottom: 8px; background: rgba(96,165,250,0.08); border-radius: 5px; padding: 4px 8px; }
-.plCardSmsBtn { width: 100%; margin-bottom: 8px; padding: 5px 10px; font-size: 11px; font-weight: 600; background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.22); border-radius: 6px; color: #93c5fd; cursor: pointer; font-family: inherit; text-align: left; }
-.plCardSmsBtn:hover { background: rgba(96,165,250,0.2); }
-.plNotesArea { width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 6px; color: #d4d4d3; font-size: 12px; font-family: inherit; padding: 6px 8px; resize: vertical; margin-bottom: 8px; line-height: 1.5; }
-.plNotesArea::placeholder { color: rgba(255,255,255,0.2); }
-.plNotesArea:focus { outline: none; border-color: rgba(139,92,246,0.4); }
-.plCardActions { display: flex; align-items: center; gap: 5px; }
-.plMoveBtn { font-size: 10px; font-weight: 600; color: #c4b5fd; background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.25); border-radius: 6px; padding: 4px 8px; cursor: pointer; white-space: nowrap; font-family: inherit; flex: 1; }
-.plMoveBtn:hover { background: rgba(139,92,246,0.22); }
-.plMoveBtnLarge { width: 100%; padding: 12px; font-size: 14px; border-radius: 10px; text-align: center; font-family: inherit; margin-bottom: 8px; }
-.plDeadBtnSm { background: rgba(239,68,68,0.1) !important; border-color: rgba(239,68,68,0.25) !important; color: #fca5a5 !important; flex: none !important; font-size: 10px !important; padding: 4px 7px !important; }
-.plDeadBtnSm:hover { background: rgba(239,68,68,0.2) !important; }
-.plDeleteCardBtn { font-size: 16px; color: rgba(255,255,255,0.2); background: none; border: none; cursor: pointer; padding: 2px 5px; border-radius: 4px; line-height: 1; margin-left: auto; flex-shrink: 0; }
-.plDeleteCardBtn:hover { color: #f87171; background: rgba(248,113,113,0.1); }
+.plCard--dragging { opacity: 0.3; }
+.plCard:hover { box-shadow: 0 3px 14px rgba(0,0,0,0.3); }
+
+.plCardHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; margin-bottom: 6px; cursor: pointer; }
+.plCardMeta { min-width: 0; flex: 1; }
+.plCardName { font-size: 12px; font-weight: 600; color: #e8e8e7; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plCardBusiness { font-size: 11px; color: #7a7a8a; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plCardHeaderRight { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+
+.plSrc { font-size: 14px; line-height: 1; }
+.plSrc--sms, .plSrc--ig, .plSrc--call { /* just emoji, no bg needed */ }
+
+.plCardDeadX {
+  width: 18px; height: 18px; border-radius: 4px;
+  background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2);
+  color: rgba(248,113,113,0.6); font-size: 13px; line-height: 1;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  padding: 0; font-family: inherit;
+  transition: all 0.12s;
+}
+.plCardDeadX:hover { background: rgba(239,68,68,0.2); color: #f87171; border-color: rgba(239,68,68,0.4); }
+
+.plMeetingChip { font-size: 10px; color: #93c5fd; background: rgba(96,165,250,0.08); border-radius: 4px; padding: 3px 7px; margin-bottom: 6px; display: inline-block; }
+.plCardSmsBtn { width: 100%; margin-bottom: 6px; padding: 4px 8px; font-size: 10px; font-weight: 600; background: rgba(96,165,250,0.08); border: 1px solid rgba(96,165,250,0.18); border-radius: 5px; color: #93c5fd; cursor: pointer; font-family: inherit; text-align: left; }
+.plCardSmsBtn:hover { background: rgba(96,165,250,0.15); }
+
+.plNotesArea { width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 5px; color: #d4d4d3; font-size: 11px; font-family: inherit; padding: 5px 7px; resize: vertical; margin-bottom: 6px; line-height: 1.5; }
+.plNotesArea::placeholder { color: rgba(255,255,255,0.18); }
+.plNotesArea:focus { outline: none; border-color: rgba(139,92,246,0.35); }
+
+.plCardFooter { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.plMoveBtn { font-size: 10px; font-weight: 600; color: #c4b5fd; background: rgba(139,92,246,0.1); border: 1px solid rgba(139,92,246,0.22); border-radius: 5px; padding: 4px 8px; cursor: pointer; white-space: nowrap; font-family: inherit; flex: 1; }
+.plMoveBtn:hover { background: rgba(139,92,246,0.2); }
+.plMoveBtnLarge { width: 100%; padding: 11px; font-size: 13px; border-radius: 9px; text-align: center; font-family: inherit; margin-bottom: 8px; }
+.plCardDeleteBtn { font-size: 10px; color: #4b5563; background: none; border: none; cursor: pointer; padding: 4px 6px; font-family: inherit; }
+.plCardDeleteBtn:hover { color: #f87171; }
+
+/* Profile */
 .plProfile { padding: 20px; min-height: 100%; }
-.plProfileTopBar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-.plBackBtn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #d4d4d3; border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; }
+.plProfileTopBar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.plBackBtn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #d4d4d3; border-radius: 7px; padding: 7px 14px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit; }
 .plBackBtn:hover { background: rgba(255,255,255,0.09); }
-.plDeleteBtn { background: none; border: 1px solid rgba(248,113,113,0.25); color: #f87171; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; font-family: inherit; }
-.plDeleteBtn:hover { background: rgba(248,113,113,0.1); }
-.plProfileCard { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 28px; max-width: 700px; }
-.plProfileHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.07); }
-.plProfileName { font-size: 24px; font-weight: 700; color: #e8e8e7; line-height: 1.2; }
-.plProfileBusiness { font-size: 15px; color: #7a7a8a; margin-top: 5px; }
-.plProfilePhone { font-size: 13px; color: #7a7a8a; margin-top: 3px; }
-.plProfileBadges { display: flex; gap: 8px; align-items: center; flex-shrink: 0; flex-wrap: wrap; }
-.plStagePill { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 4px 12px; white-space: nowrap; }
-.plProfileSection { margin-bottom: 20px; }
+.plDeleteBtn { background: none; border: 1px solid rgba(248,113,113,0.2); color: #f87171; border-radius: 7px; padding: 7px 14px; font-size: 12px; cursor: pointer; font-family: inherit; }
+.plDeleteBtn:hover { background: rgba(248,113,113,0.08); }
+.plProfileCard { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 24px; max-width: 680px; }
+.plProfileHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+.plProfileName { font-size: 22px; font-weight: 700; color: #e8e8e7; }
+.plProfileBusiness { font-size: 14px; color: #7a7a8a; margin-top: 4px; }
+.plProfilePhone { font-size: 12px; color: #7a7a8a; margin-top: 3px; }
+.plProfileBadges { display: flex; gap: 6px; align-items: center; flex-shrink: 0; flex-wrap: wrap; }
+.plStagePill { font-size: 11px; font-weight: 600; border-radius: 999px; padding: 4px 12px; white-space: nowrap; }
+.plProfileSection { margin-bottom: 18px; }
 .plProfileActions { display: flex; flex-direction: column; gap: 8px; }
-.plDeadBtn { width: 100%; padding: 11px; font-size: 13px; font-weight: 600; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25); border-radius: 10px; color: #fca5a5; cursor: pointer; font-family: inherit; }
-.plDeadBtn:hover { background: rgba(239,68,68,0.18); }
-.plSectionLabel { font-size: 11px; font-weight: 700; color: #7a7a8a; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; }
+.plDeadBtn { width: 100%; padding: 10px; font-size: 13px; font-weight: 600; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 8px; color: #f87171; cursor: pointer; font-family: inherit; }
+.plDeadBtn:hover { background: rgba(239,68,68,0.15); }
+.plSectionLabel { font-size: 10px; font-weight: 700; color: #7a7a8a; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 7px; }
 .plProfileNotes { width: 100%; box-sizing: border-box; font-size: 14px; line-height: 1.7; }
-.plSmsBtn { width: 100%; padding: 10px 14px; font-size: 13px; font-weight: 600; background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.25); border-radius: 10px; color: #93c5fd; cursor: pointer; font-family: inherit; text-align: left; }
-.plSmsBtn:hover { background: rgba(96,165,250,0.18); }
-.plOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
-.plModal { background: #14141c; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 24px; width: 100%; max-width: 460px; max-height: 90vh; overflow-y: auto; }
-.plModalHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-.plModalTitle { font-size: 16px; font-weight: 600; color: #d4d4d3; }
-.plModalClose { background: none; border: none; color: #7a7a8a; font-size: 22px; cursor: pointer; line-height: 1; padding: 0 4px; }
+.plSmsBtn { width: 100%; padding: 9px 14px; font-size: 12px; font-weight: 600; background: rgba(96,165,250,0.08); border: 1px solid rgba(96,165,250,0.2); border-radius: 8px; color: #93c5fd; cursor: pointer; font-family: inherit; text-align: left; }
+.plSmsBtn:hover { background: rgba(96,165,250,0.15); }
+
+/* Modal */
+.plOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+.plModal { background: #13131a; border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 22px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; }
+.plModalHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.plModalTitle { font-size: 15px; font-weight: 700; color: #e8e8e7; }
+.plModalClose { background: none; border: none; color: #7a7a8a; font-size: 22px; cursor: pointer; padding: 0 4px; }
 .plModalClose:hover { color: #d4d4d3; }
-.plField { margin-bottom: 14px; }
-.plRow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.plLabel { display: block; font-size: 11px; font-weight: 700; color: #7a7a8a; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.06em; }
-.plInput, .plSelect, .plTextarea { width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #d4d4d3; font-size: 13px; font-family: inherit; padding: 9px 11px; color-scheme: dark; }
-.plInput:focus, .plSelect:focus, .plTextarea:focus { outline: none; border-color: rgba(139,92,246,0.5); }
-.plSelect option { background: #14141c; }
+.plField { margin-bottom: 12px; }
+.plRow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.plLabel { display: block; font-size: 10px; font-weight: 700; color: #7a7a8a; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+/* Source picker */
+.plSourcePicker { display: flex; gap: 6px; }
+.plSourceBtn {
+  flex: 1; padding: 8px 6px; background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09); border-radius: 7px;
+  color: #7a7a8a; font-size: 11px; font-weight: 600; font-family: inherit;
+  cursor: pointer; text-align: center; transition: all 0.12s;
+}
+.plSourceBtn:hover { background: rgba(255,255,255,0.08); color: #d4d4d3; }
+.plSourceBtn--active { background: rgba(139,92,246,0.15); border-color: rgba(139,92,246,0.35); color: #c4b5fd; }
+
+/* Convo selector */
+.plConvoList {
+  background: #0f0f16; border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px; margin-top: 4px; overflow: hidden;
+  max-height: 180px; overflow-y: auto;
+}
+.plConvoItem {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; background: none; border: none; border-bottom: 1px solid rgba(255,255,255,0.05);
+  cursor: pointer; font-family: inherit; gap: 8px;
+  transition: background 0.1s;
+}
+.plConvoItem:last-child { border-bottom: none; }
+.plConvoItem:hover { background: rgba(139,92,246,0.1); }
+.plConvoName { font-size: 12px; font-weight: 600; color: #d4d4d3; text-align: left; }
+.plConvoPhone { font-size: 11px; color: #7a7a8a; white-space: nowrap; }
+.plConvoEmpty { padding: 12px; font-size: 12px; color: #7a7a8a; text-align: center; }
+.plConvoSelected {
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.2);
+  border-radius: 6px; padding: 6px 10px; margin-top: 4px;
+  font-size: 12px; color: #86efac;
+}
+.plConvoUnlink { background: none; border: none; color: #7a7a8a; cursor: pointer; font-size: 16px; padding: 0 2px; }
+.plConvoUnlink:hover { color: #f87171; }
+
+.plInput, .plSelect, .plTextarea { width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 7px; color: #d4d4d3; font-size: 12px; font-family: inherit; padding: 8px 10px; color-scheme: dark; }
+.plInput:focus, .plSelect:focus, .plTextarea:focus { outline: none; border-color: rgba(139,92,246,0.45); }
+.plSelect option { background: #13131a; }
 .plTextarea { resize: vertical; }
-.plTimeRow { display: flex; gap: 8px; align-items: center; }
+.plTimeRow { display: flex; gap: 6px; align-items: center; }
 .plDateInput { flex: 2; }
 .plTimeSelect { flex: 1.2; }
 .plMinSelect { flex: 0.9; }
-.plModalActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-.plBtnPrimary { background: linear-gradient(90deg, #8b5cf6 0%, #60a5fa 100%); color: #fff; border: none; border-radius: 8px; padding: 9px 20px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.plModalActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.plBtnPrimary { background: linear-gradient(90deg, #8b5cf6, #60a5fa); color: #fff; border: none; border-radius: 7px; padding: 9px 20px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
 .plBtnPrimary:hover:not(:disabled) { opacity: 0.9; }
 .plBtnPrimary:disabled { opacity: 0.4; cursor: not-allowed; }
-.plBtnSecondary { background: rgba(255,255,255,0.05); color: #7a7a8a; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 9px 20px; font-size: 13px; cursor: pointer; font-family: inherit; }
+.plBtnSecondary { background: rgba(255,255,255,0.05); color: #7a7a8a; border: 1px solid rgba(255,255,255,0.08); border-radius: 7px; padding: 9px 18px; font-size: 12px; cursor: pointer; font-family: inherit; }
 .plBtnSecondary:hover { background: rgba(255,255,255,0.09); }
 `;
