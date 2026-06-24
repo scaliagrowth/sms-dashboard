@@ -7,12 +7,11 @@ import { LeadDetailsPanel } from './LeadDetailsPanel';
 import { ReplyBox } from './ReplyBox';
 import { PipelineView } from './PipelineView';
 import { DashboardView } from './DashboardView';
-import { LeadScrapingView } from './LeadScrapingView';
 import type { ConversationDetail, ConversationSummary } from '@/lib/types';
 
-type Tab = 'dashboard' | 'inbox' | 'pipeline' | 'leads';
+type Tab = 'dashboard' | 'inbox' | 'pipeline';
 
-const LOGO_SRC = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAYAAACOEfKtAAAEW0lEQVR42u2Zz2tcVRTHv+e+l6RVUi0WQTAbF4LdKd0ILsRlEf8BFxb/B0Fw1bU7NxbEjd0FFwouRGjJUhBFiYi/6qIRwQZjM4Rx5r37PV8Xc1/yMqbS2snYCecDl8m8N7x77/ede+733ABBEARBEARBEARBEARBEARBEARBEAQPNPYgDEKSHddYzMxPnIBFsAqAzIwRgfcmXjUt2mAwOLe6unoGwCkAaXpcTdNgeXlZ09c6Du41aBpAksrLWVleXt5c9JfUjzoAwO3bt8/mnF8leZXkJskdko3Ldb+4XCRbSWrb9rKkJKk6EeKVybxB8tc7zv/+WyNJLdt3uz4XXrzSzpD8rCdWWyIlS+Kk0Sn1Gg+EIZ2ik901lvv9axpLEsn1Ll30I39RBUySUiY/lSSK4yKYz7g1kpRzvi59u1z6XXjxagAYj8evl6gbT02aktqukcySWqr7VKaUSebuWv+35fe5F3lf7ezsPGJmi790u+W7vr5ekfxmMj/mKQFnBsmf9/b2nph33rPjXLpm5qPR6OmllZXv0sSe7N8ufe8AvAxUv+Scra5rzzkfOaa6rgUA0/fruvbyrK/N7Leu35MQfRUAjEaji5Pcp3xEvnpr1i9t3vOsj+vBGxsbBgBVVZ0GoDSJuo5UjO6Lw+Hwg93d3R13F0mtra1ha2vr0LPWAGwd0cetW7fyhQsX2n7ZdpRRX9QlXJkZ27Z9qa7rawCIw8sYAMzddydLGSYJZQM4PEJZ+VS/xhWAMZD+APwnSdeqqvrIzPZOxDLuLMRgMDhHctB5PfY2EZKc8UZyo23bV06Ege7nQZLvlDn+pcO5sLMy+T5aZ8ibfYfethf7/S96FZK2t7dXSV7vl2yd5ysTb6h9Efa/d8JMf5bW3slMk7wh6VRXBZ2UOngp5/wmye99RhawPGdaxCxJTdO8MI8otHmJWJI+JC01TfNMSukpMzt7L2MgaVVVGQCrqup5By6lA08JAHA4E1JF8rW6rq9Kqs0sn4iqRNLSLJcUpc9Lfb2fV0sqUM75Ur+cXDgfeGS4m7WzetZoNDqfHE8iQQnJDgzm5O+c87av6llsATtfJulxd39f0mPlu00JDEEwHHhBM/vHgayZ1QDOI+FhAF0pB3dHSim5+9jdN+ch4FzEA4A/pUdJfqnZMn0s1pYdfmNeXrCeg3i6efPm6TPuH6eUnnN4k5Cqu4kMdzcASClp+npK6dB/8kr0OYDa3d+e5yZ5rB5QUkXykxIuzawPUstpdNs7yn9v4SuRfr4iebUst2HfKN9NIydm+g5GujPT/VLuSncCvrAGuhd5D+WcP9QxQ3FM8lrbti/3+p+beMeRA83MfDgcPruysjIGcAXw2v0gH6WUuvxkJc9ZSmmS81IylNw3ncdSSnJ3ABgm4HdKP+Sq+uJUZT/2d3sE/ynq/5eDAzvmPDirSelfxuwRdUEQBEEQBEEQBEEQBEEQBEEQBEEQBEEQBEEwe/4GP5r4aLFIaw4AAAAASUVORK5CYII=';
+const LOGO_SRC = 'data:image/png;base64,';
 
 export function InboxLayout() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
@@ -105,10 +104,9 @@ export function InboxLayout() {
   const showThread = !isMobile || mobileView === 'thread';
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'dashboard',  label: 'Dashboard' },
-    { id: 'inbox',      label: 'Inbox' },
-    { id: 'pipeline',   label: 'Pipeline' },
-    { id: 'leads',      label: 'Lead Scraping' },
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'inbox',     label: 'Inbox' },
+    { id: 'pipeline',  label: 'Pipeline' },
   ];
 
   return (
@@ -124,16 +122,16 @@ export function InboxLayout() {
         .app-logo {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 9px;
         }
         .app-logo img {
-          width: 30px;
-          height: 30px;
+          width: 28px;
+          height: 28px;
           object-fit: contain;
           filter: drop-shadow(0 0 8px rgba(139,92,246,0.5));
         }
         .app-wordmark {
-          font-size: 20px;
+          font-size: 19px;
           font-weight: 800;
           color: #e8e8e7;
           letter-spacing: -0.4px;
@@ -215,10 +213,6 @@ export function InboxLayout() {
         <div className="scroll-wrapper">
           <PipelineView onGoToSMS={handleGoToSMS} />
         </div>
-      ) : activeTab === 'leads' ? (
-        <div className="scroll-wrapper">
-          <LeadScrapingView />
-        </div>
       ) : (
         <div className="dashboardGrid">
           {showList ? (
@@ -238,7 +232,7 @@ export function InboxLayout() {
               {isMobile ? (
                 <div className="mobileThreadBar">
                   <button className="backButton" onClick={() => setMobileView('list')}>
-                    ← Back to inbox
+                    ← Back
                   </button>
                   {detail?.conversation?.needsResponse ? (
                     <span className="needsResponseBadge">Needs response</span>
