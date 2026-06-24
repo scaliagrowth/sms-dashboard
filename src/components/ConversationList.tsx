@@ -29,12 +29,16 @@ function isHot(responseType: string | null) {
   return (responseType || '').trim().toLowerCase() === 'highly interested';
 }
 
-function fmtDateTime(iso: string | null | undefined): string {
+function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
-  const date = d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' });
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  return `${date} ${time}`;
+  return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' });
+}
+
+function fmtTime(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
 export function ConversationList({ conversations, selectedPhone, onSelect }: Props) {
@@ -46,6 +50,12 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
     [conversations]
   );
 
+  const counts = useMemo(() => ({
+    all: conversations.filter(c => c.workflowStatus !== 'dnc').length,
+    hot: conversations.filter(c => isHot(c.responseType)).length,
+    dnc: conversations.filter(c => c.workflowStatus === 'dnc').length,
+  }), [conversations]);
+
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
     const matching = conversations.filter((c) => {
@@ -54,175 +64,175 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
       if (query && !haystack.includes(query)) return false;
       if (filterMode === 'hot') return isHot(c.responseType);
       if (filterMode === 'dnc') return c.workflowStatus === 'dnc';
-      // All tab excludes DNC
       return c.workflowStatus !== 'dnc';
     });
     return sortConversations(matching);
   }, [conversations, filterMode, search]);
 
-  const tabs: { id: FilterMode; label: string; count?: number }[] = [
-    { id: 'all', label: 'All', count: conversations.filter(c => c.workflowStatus !== 'dnc').length },
-    { id: 'hot', label: '🔥 Hot', count: conversations.filter(c => isHot(c.responseType)).length },
-    { id: 'dnc', label: 'DNC', count: conversations.filter(c => c.workflowStatus === 'dnc').length },
-  ];
-
   return (
     <aside className="sidebar">
       <style>{`
+        .cl-wrap {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          min-height: 0;
+          overflow: hidden;
+        }
         .cl-top {
           display: flex;
-          justify-content: space-between;
           align-items: center;
-          margin-bottom: 12px;
+          justify-content: space-between;
+          margin-bottom: 10px;
+          flex-shrink: 0;
         }
         .cl-title {
-          font-size: 16px;
+          font-size: 15px;
           font-weight: 700;
           color: #e8e8e7;
           margin: 0;
         }
-        .cl-needs-badge {
+        .cl-needs-pill {
           display: inline-flex;
           align-items: center;
           gap: 5px;
-          background: rgba(245,158,11,0.15);
-          border: 1px solid rgba(245,158,11,0.3);
+          background: rgba(245,158,11,0.14);
+          border: 1px solid rgba(245,158,11,0.28);
           border-radius: 999px;
-          padding: 3px 10px;
+          padding: 2px 9px;
           font-size: 11px;
           font-weight: 700;
           color: #fcd34d;
           white-space: nowrap;
         }
         .cl-needs-dot {
-          width: 6px; height: 6px;
+          width: 5px; height: 5px;
           border-radius: 50%;
           background: #f59e0b;
-          flex-shrink: 0;
         }
         .cl-search {
           width: 100%;
           box-sizing: border-box;
-          background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(255,255,255,0.08);
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.09);
           border-radius: 8px;
-          padding: 9px 12px;
+          padding: 8px 11px;
           color: #d4d4d3;
           font-size: 12px;
           font-family: inherit;
-          margin-bottom: 10px;
+          margin-bottom: 8px;
+          flex-shrink: 0;
         }
         .cl-search:focus { outline: none; border-color: rgba(139,92,246,0.4); }
-        .cl-search::placeholder { color: #7a7a8a; }
+        .cl-search::placeholder { color: #5a5a6a; }
+
         .cl-tabs {
           display: flex;
           gap: 4px;
-          margin-bottom: 12px;
+          margin-bottom: 10px;
+          flex-shrink: 0;
         }
         .cl-tab {
           flex: 1;
           background: rgba(255,255,255,0.03);
           border: 1px solid rgba(255,255,255,0.07);
-          border-radius: 7px;
-          color: #7a7a8a;
+          border-radius: 6px;
+          color: #6a6a7a;
           font-size: 11px;
           font-weight: 600;
           font-family: inherit;
-          padding: 6px 4px;
+          padding: 5px 4px;
           cursor: pointer;
-          transition: all 0.15s;
-          white-space: nowrap;
+          transition: all 0.12s;
           text-align: center;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 5px;
         }
         .cl-tab:hover { color: #d4d4d3; background: rgba(255,255,255,0.06); }
         .cl-tab--active {
-          background: rgba(139,92,246,0.15);
-          border-color: rgba(139,92,246,0.35);
+          background: rgba(139,92,246,0.14);
+          border-color: rgba(139,92,246,0.3);
           color: #c4b5fd;
         }
-        .cl-tab-count {
-          background: rgba(255,255,255,0.08);
-          border-radius: 4px;
-          padding: 1px 5px;
-          font-size: 10px;
-        }
-        .cl-tab--active .cl-tab-count {
-          background: rgba(139,92,246,0.25);
-        }
 
-        /* Conversation cards */
+        /* Cards */
+        .cl-list {
+          flex: 1;
+          overflow-y: auto;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          padding-right: 2px;
+        }
         .cl-card {
           width: 100%;
           text-align: left;
           background: transparent;
           border: 1px solid rgba(255,255,255,0.06);
-          border-radius: 10px;
-          padding: 10px 12px;
+          border-left: 3px solid transparent;
+          border-radius: 8px;
+          padding: 9px 10px;
           cursor: pointer;
-          transition: background 0.12s, border-color 0.12s;
-          margin-bottom: 4px;
-          position: relative;
-          overflow: hidden;
+          transition: background 0.1s, border-color 0.1s;
+          box-sizing: border-box;
         }
-        .cl-card::before {
-          content: '';
-          position: absolute;
-          left: 0; top: 0; bottom: 0;
-          width: 3px;
-          background: transparent;
-          border-radius: 10px 0 0 10px;
-          transition: background 0.12s;
+        .cl-card:hover {
+          background: rgba(255,255,255,0.04);
         }
-        .cl-card:hover { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); }
         .cl-card--active {
           background: rgba(139,92,246,0.08);
-          border-color: rgba(139,92,246,0.3);
+          border-color: rgba(139,92,246,0.25);
+          border-left-color: #8b5cf6;
         }
-        .cl-card--active::before { background: #8b5cf6; }
-        .cl-card--needs::before { background: #f59e0b; }
-        .cl-card--needs { border-color: rgba(245,158,11,0.2); }
+        .cl-card--needs {
+          border-left-color: #f59e0b;
+          border-color: rgba(245,158,11,0.18);
+        }
+        .cl-card--active.cl-card--needs {
+          border-left-color: #8b5cf6;
+        }
 
-        .cl-card-top {
+        /* Row 1: name + date */
+        .cl-row1 {
           display: flex;
           align-items: baseline;
           justify-content: space-between;
           gap: 8px;
-          margin-bottom: 3px;
+          margin-bottom: 4px;
         }
-        .cl-card-name {
+        .cl-name {
           font-size: 13px;
           font-weight: 600;
-          color: #e8e8e7;
-          white-space: nowrap;
+          color: #e2e2e1;
           overflow: hidden;
           text-overflow: ellipsis;
+          white-space: nowrap;
           min-width: 0;
+          flex: 1;
         }
-        .cl-card-time {
+        .cl-date {
           font-size: 10px;
-          color: #7a7a8a;
+          color: #5a5a6a;
           white-space: nowrap;
           flex-shrink: 0;
         }
-        .cl-card-mid {
+
+        /* Row 2: time + badge */
+        .cl-row2 {
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 6px;
-          margin-bottom: 4px;
+          margin-bottom: 5px;
         }
-        .cl-card-phone {
+        .cl-time {
           font-size: 11px;
-          color: #7a7a8a;
+          color: #6a6a7a;
+          white-space: nowrap;
         }
-        .cl-card-badges {
+        .cl-badges {
           display: flex;
           align-items: center;
-          gap: 4px;
+          gap: 3px;
           flex-shrink: 0;
         }
         .cl-badge {
@@ -231,110 +241,112 @@ export function ConversationList({ conversations, selectedPhone, onSelect }: Pro
           border-radius: 4px;
           padding: 2px 6px;
           white-space: nowrap;
-          letter-spacing: 0.03em;
+          letter-spacing: 0.02em;
         }
-        .cl-badge--active { background: rgba(96,165,250,0.12); color: #93c5fd; border: 1px solid rgba(96,165,250,0.2); }
-        .cl-badge--followup { background: rgba(245,158,11,0.12); color: #fcd34d; border: 1px solid rgba(245,158,11,0.2); }
-        .cl-badge--closed { background: rgba(148,163,184,0.1); color: #94a3b8; border: 1px solid rgba(148,163,184,0.15); }
-        .cl-badge--dnc { background: rgba(248,113,113,0.1); color: #f87171; border: 1px solid rgba(248,113,113,0.18); }
-        .cl-badge--needs { background: rgba(245,158,11,0.15); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3); }
-        .cl-badge--hot { font-size: 11px; }
+        .cl-badge--active { background: rgba(96,165,250,0.1); color: #7eb8f7; border: 1px solid rgba(96,165,250,0.18); }
+        .cl-badge--followup { background: rgba(245,158,11,0.1); color: #fcd34d; border: 1px solid rgba(245,158,11,0.18); }
+        .cl-badge--closed { background: rgba(148,163,184,0.1); color: #94a3b8; border: 1px solid rgba(148,163,184,0.14); }
+        .cl-badge--dnc { background: rgba(248,113,113,0.1); color: #f87171; border: 1px solid rgba(248,113,113,0.16); }
+        .cl-badge--needs { background: rgba(245,158,11,0.12); color: #fcd34d; border: 1px solid rgba(245,158,11,0.25); }
 
-        .cl-card-preview {
+        /* Row 3: preview */
+        .cl-preview {
           font-size: 11px;
-          color: #7a7a8a;
+          color: #6a6a7a;
           line-height: 1.4;
-          white-space: nowrap;
           overflow: hidden;
-          text-overflow: ellipsis;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
         }
-        .cl-card-delivery {
-          font-size: 10px;
-          color: #4b5563;
-          margin-top: 2px;
-        }
-        .cl-card-delivery--undelivered { color: #f87171; }
-        .cl-card-delivery--delivered { color: #4b5563; }
 
         .cl-empty {
           text-align: center;
-          color: #7a7a8a;
+          color: #5a5a6a;
           font-size: 12px;
-          padding: 32px 0;
+          padding: 28px 0;
         }
       `}</style>
 
-      <div className="cl-top">
-        <h2 className="cl-title">Inbox</h2>
-        {needsResponseCount > 0 && (
-          <div className="cl-needs-badge">
-            <span className="cl-needs-dot" />
-            {needsResponseCount} need reply
-          </div>
-        )}
-      </div>
+      <div className="cl-wrap">
+        <div className="cl-top">
+          <h2 className="cl-title">Inbox</h2>
+          {needsResponseCount > 0 && (
+            <div className="cl-needs-pill">
+              <span className="cl-needs-dot" />
+              {needsResponseCount} need reply
+            </div>
+          )}
+        </div>
 
-      <input
-        className="cl-search"
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        placeholder="Search business, phone, message…"
-      />
+        <input
+          className="cl-search"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search name, phone, message…"
+        />
 
-      <div className="cl-tabs">
-        {tabs.map(t => (
-          <button
-            key={t.id}
-            className={`cl-tab${filterMode === t.id ? ' cl-tab--active' : ''}`}
-            onClick={() => setFilterMode(t.id)}
-          >
-            {t.label}
-            {t.count !== undefined && <span className="cl-tab-count">{t.count}</span>}
-          </button>
-        ))}
-      </div>
-
-      <div className="conversationList" style={{ gap: 0 }}>
-        {filtered.length ? filtered.map((c) => {
-          const isActive = selectedPhone === c.phone;
-          const hot = isHot(c.responseType);
-          const statusLabel =
-            c.workflowStatus === 'dnc' ? 'dnc' :
-            c.workflowStatus === 'closed' ? 'closed' :
-            c.workflowStatus === 'follow-up' ? 'followup' : 'active';
-
-          return (
+        <div className="cl-tabs">
+          {([
+            { id: 'all' as FilterMode, label: `All ${counts.all}` },
+            { id: 'hot' as FilterMode, label: `🔥 ${counts.hot}` },
+            { id: 'dnc' as FilterMode, label: `DNC ${counts.dnc}` },
+          ]).map(t => (
             <button
-              key={c.phone}
-              className={`cl-card${isActive ? ' cl-card--active' : ''}${c.needsResponse ? ' cl-card--needs' : ''}`}
-              onClick={() => onSelect(c.phone)}
+              key={t.id}
+              className={`cl-tab${filterMode === t.id ? ' cl-tab--active' : ''}`}
+              onClick={() => setFilterMode(t.id)}
             >
-              <div className="cl-card-top">
-                <span className="cl-card-name">
-                  {hot && <span className="cl-badge--hot">🔥 </span>}
-                  {c.businessName || formatPhoneDisplay(c.phone)}
-                </span>
-                <span className="cl-card-time">{fmtDateTime(c.lastMessageAt)}</span>
-              </div>
-              <div className="cl-card-mid">
-                <span className="cl-card-phone">{formatPhoneDisplay(c.phone)}</span>
-                <div className="cl-card-badges">
-                  <span className={`cl-badge cl-badge--${statusLabel}`}>
-                    {c.workflowStatus === 'dnc' ? 'DNC' :
-                     c.workflowStatus === 'closed' ? 'Closed' :
-                     c.workflowStatus === 'follow-up' ? 'Follow up' : 'Active'}
-                  </span>
-                  {c.needsResponse && <span className="cl-badge cl-badge--needs">Reply needed</span>}
-                </div>
-              </div>
-              <div className="cl-card-preview">
-                {c.lastMessageBody || c.replyText || 'No messages yet'}
-              </div>
+              {t.label}
             </button>
-          );
-        }) : (
-          <div className="cl-empty">No conversations match.</div>
-        )}
+          ))}
+        </div>
+
+        <div className="cl-list">
+          {filtered.length ? filtered.map((c) => {
+            const isActive = selectedPhone === c.phone;
+            const hot = isHot(c.responseType);
+            const statusKey =
+              c.workflowStatus === 'dnc' ? 'dnc' :
+              c.workflowStatus === 'closed' ? 'closed' :
+              c.workflowStatus === 'follow-up' ? 'followup' : 'active';
+
+            return (
+              <button
+                key={c.phone}
+                className={`cl-card${isActive ? ' cl-card--active' : ''}${c.needsResponse ? ' cl-card--needs' : ''}`}
+                onClick={() => onSelect(c.phone)}
+              >
+                <div className="cl-row1">
+                  <span className="cl-name">
+                    {hot ? '🔥 ' : ''}{c.businessName || formatPhoneDisplay(c.phone)}
+                  </span>
+                  <span className="cl-date">{fmtDate(c.lastMessageAt)}</span>
+                </div>
+
+                <div className="cl-row2">
+                  <span className="cl-time">{fmtTime(c.lastMessageAt)}</span>
+                  <div className="cl-badges">
+                    <span className={`cl-badge cl-badge--${statusKey}`}>
+                      {statusKey === 'dnc' ? 'DNC' :
+                       statusKey === 'closed' ? 'Closed' :
+                       statusKey === 'followup' ? 'Follow up' : 'Active'}
+                    </span>
+                    {c.needsResponse && (
+                      <span className="cl-badge cl-badge--needs">Reply</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="cl-preview">
+                  {c.lastMessageBody || c.replyText || 'No messages yet'}
+                </div>
+              </button>
+            );
+          }) : (
+            <div className="cl-empty">No conversations match.</div>
+          )}
+        </div>
       </div>
     </aside>
   );
