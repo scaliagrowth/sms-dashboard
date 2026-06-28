@@ -15,13 +15,22 @@ interface PaymentClient {
   id: string;
   name: string;
   amount: number;
-  startDate: string; // YYYY-MM-DD
+  startDate: string;
   notes: string;
 }
 
+interface TrialClient {
+  id: string;
+  name: string;
+  startDate: string; // YYYY-MM-DD — day campaigns started
+}
+
 /* ─── Storage keys ─── */
-const TASK_KEY = 'scalia_tasks_v1';
-const PAY_KEY  = 'scalia_payments_v1';
+const TASK_KEY  = 'scalia_tasks_v1';
+const PAY_KEY   = 'scalia_payments_v1';
+const TRIAL_KEY = 'scalia_trials_v1';
+
+const TRIAL_DAYS = 14;
 
 function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
 function today() { return new Date().toISOString().slice(0, 10); }
@@ -37,24 +46,32 @@ function fmt$(n: number) {
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
-/* Given a start date, compute the next invoice due date from today */
+function fmtDate(d: Date): string {
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/* Next monthly invoice date */
 function nextInvoiceDate(startDate: string): { date: Date; daysUntil: number } {
   const start = new Date(startDate + 'T12:00:00');
   const now = new Date();
   now.setHours(12, 0, 0, 0);
-
-  // Find next occurrence of the same day-of-month
   let candidate = new Date(now.getFullYear(), now.getMonth(), start.getDate(), 12);
   if (candidate < now) {
     candidate = new Date(now.getFullYear(), now.getMonth() + 1, start.getDate(), 12);
   }
-
   const daysUntil = Math.round((candidate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
   return { date: candidate, daysUntil };
 }
 
-function fmtDate(d: Date): string {
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+/* Trial end date + days remaining */
+function trialInfo(startDate: string): { endDate: Date; daysLeft: number; expired: boolean } {
+  const start = new Date(startDate + 'T12:00:00');
+  const endDate = new Date(start);
+  endDate.setDate(start.getDate() + TRIAL_DAYS);
+  const now = new Date();
+  now.setHours(12, 0, 0, 0);
+  const daysLeft = Math.round((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  return { endDate, daysLeft, expired: daysLeft < 0 };
 }
 
 export function DashboardView({ conversations, onNavigate }: {
@@ -63,6 +80,7 @@ export function DashboardView({ conversations, onNavigate }: {
 }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [payments, setPayments] = useState<PaymentClient[]>([]);
+  const [trials, setTrials] = useState<TrialClient[]>([]);
   const [newTask, setNewTask] = useState('');
 
   // Payment form
@@ -72,9 +90,15 @@ export function DashboardView({ conversations, onNavigate }: {
   const [payNotes, setPayNotes] = useState('');
   const [showPayForm, setShowPayForm] = useState(false);
 
+  // Trial form
+  const [trialName, setTrialName] = useState('');
+  const [trialStart, setTrialStart] = useState(today());
+  const [showTrialForm, setShowTrialForm] = useState(false);
+
   useEffect(() => {
     setTasks(load<Task[]>(TASK_KEY, []));
     setPayments(load<PaymentClient[]>(PAY_KEY, []));
+    setTrials(load<TrialClient[]>(TRIAL_KEY, []));
   }, []);
 
   /* Tasks */
@@ -109,12 +133,32 @@ export function DashboardView({ conversations, onNavigate }: {
     setPayments(next); save(PAY_KEY, next);
   }
 
+  /* Trials */
+  function addTrial() {
+    if (!trialName.trim() || !trialStart) return;
+    const t: TrialClient = { id: uid(), name: trialName.trim(), startDate: trialStart };
+    const next = [...trials, t];
+    setTrials(next); save(TRIAL_KEY, next);
+    setTrialName(''); setTrialStart(today());
+    setShowTrialForm(false);
+  }
+  function deleteTrial(id: string) {
+    const next = trials.filter(t => t.id !== id);
+    setTrials(next); save(TRIAL_KEY, next);
+  }
+
   /* Stats */
   const totalLeads = conversations.filter(c => c.workflowStatus !== 'dnc').length;
   const hotLeads = conversations.filter(c => (c.responseType || '').trim().toLowerCase() === 'highly interested').length;
   const needsResponse = conversations.filter(c => c.needsResponse && c.workflowStatus !== 'dnc').length;
+  const activeTrials = trials.filter(t => !trialInfo(t.startDate).expired).length;
 
   const sortedTasks = [...tasks].sort((a, b) => Number(a.done) - Number(b.done) || b.createdAt - a.createdAt);
+
+  // Sort trials: expiring soonest first
+  const sortedTrials = [...trials].sort((a, b) => {
+    return trialInfo(a.startDate).daysLeft - trialInfo(b.startDate).daysLeft;
+  });
 
   return (
     <div className="dv-root">
@@ -148,18 +192,104 @@ export function DashboardView({ conversations, onNavigate }: {
           <div className="dv-stat-val">{needsResponse}</div>
           <div className="dv-stat-lbl">Need reply</div>
         </div>
-        <div
-          className="dv-stat dv-stat--link"
-          style={{ '--c': '#60a5fa' } as React.CSSProperties}
-          onClick={() => onNavigate?.('pipeline')}
-        >
+        <div className="dv-stat" style={{ '--c': '#60a5fa' } as React.CSSProperties}>
           <div className="dv-stat-bar" />
           <div className="dv-stat-val">{payments.length}</div>
           <div className="dv-stat-lbl">Active clients</div>
         </div>
+        <div className="dv-stat" style={{ '--c': '#a78bfa' } as React.CSSProperties}>
+          <div className="dv-stat-bar" />
+          <div className="dv-stat-val">{activeTrials}</div>
+          <div className="dv-stat-lbl">Active trials</div>
+        </div>
       </div>
 
       <div className="dv-grid">
+
+        {/* Free Trials */}
+        <div className="dv-panel dv-panel--wide">
+          <div className="dv-panel-hdr">
+            <span className="dv-panel-title">🚀 Free Trials</span>
+            <button className="dv-btn-ghost" onClick={() => setShowTrialForm(f => !f)}>
+              {showTrialForm ? 'Cancel' : '+ Add Trial'}
+            </button>
+          </div>
+
+          {showTrialForm && (
+            <div className="dv-pay-form">
+              <div className="dv-pay-form-row">
+                <div className="dv-ff">
+                  <label className="dv-lbl">Business name</label>
+                  <input
+                    className="dv-input"
+                    value={trialName}
+                    onChange={e => setTrialName(e.target.value)}
+                    placeholder="e.g. Wright Lane Detailing"
+                    onKeyDown={e => e.key === 'Enter' && addTrial()}
+                    autoFocus
+                  />
+                </div>
+                <div className="dv-ff dv-ff--sm">
+                  <label className="dv-lbl">Campaign start date</label>
+                  <input
+                    className="dv-input"
+                    type="date"
+                    value={trialStart}
+                    onChange={e => setTrialStart(e.target.value)}
+                    style={{ colorScheme: 'dark' }}
+                  />
+                </div>
+              </div>
+              <button className="dv-btn-primary" onClick={addTrial} disabled={!trialName.trim()}>
+                Add Trial
+              </button>
+            </div>
+          )}
+
+          {trials.length === 0 && !showTrialForm ? (
+            <div className="dv-empty">No active trials. Add one above.</div>
+          ) : (
+            <div className="dv-pay-list">
+              {sortedTrials.map(t => {
+                const { endDate, daysLeft, expired } = trialInfo(t.startDate);
+                const urgent = !expired && daysLeft <= 3;
+                return (
+                  <div key={t.id} className={`dv-pay-row${expired ? ' dv-pay-row--overdue' : urgent ? ' dv-pay-row--urgent' : ''}`}>
+                    <div className="dv-pay-left">
+                      <div className="dv-pay-name">{t.name}</div>
+                      <div className="dv-pay-notes">Started {fmtDate(new Date(t.startDate + 'T12:00:00'))}</div>
+                    </div>
+                    <div className="dv-trial-mid">
+                      <div className="dv-trial-bar-wrap">
+                        <div
+                          className={`dv-trial-bar${expired ? ' dv-trial-bar--expired' : urgent ? ' dv-trial-bar--urgent' : ''}`}
+                          style={{ width: `${Math.max(0, Math.min(100, ((TRIAL_DAYS - Math.max(0, daysLeft)) / TRIAL_DAYS) * 100))}%` }}
+                        />
+                      </div>
+                      <div className="dv-trial-bar-lbl">
+                        {expired ? 'Trial ended' : `Day ${TRIAL_DAYS - daysLeft} of ${TRIAL_DAYS}`}
+                      </div>
+                    </div>
+                    <div className="dv-pay-right">
+                      <div className={`dv-pay-due${expired ? ' dv-pay-due--overdue' : urgent ? ' dv-pay-due--urgent' : ''}`}>
+                        {expired ? '⚠ Expired' : `Ends ${fmtDate(endDate)}`}
+                      </div>
+                      <div className="dv-pay-days">
+                        {expired
+                          ? `${Math.abs(daysLeft)}d ago`
+                          : daysLeft === 0
+                          ? 'Ends today!'
+                          : `${daysLeft}d left`}
+                      </div>
+                    </div>
+                    <button className="dv-pay-del" onClick={() => deleteTrial(t.id)}>×</button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Payment Reminders */}
         <div className="dv-panel dv-panel--wide">
           <div className="dv-panel-hdr">
@@ -259,7 +389,7 @@ export function DashboardView({ conversations, onNavigate }: {
           </div>
         </div>
 
-        {/* Quick links */}
+        {/* Quick Actions */}
         <div className="dv-panel">
           <div className="dv-panel-hdr">
             <span className="dv-panel-title">🔗 Quick Actions</span>
@@ -281,6 +411,7 @@ export function DashboardView({ conversations, onNavigate }: {
             </button>
           </div>
         </div>
+
       </div>
     </div>
   );
@@ -306,11 +437,11 @@ const dvCss = `
   white-space: nowrap; flex-shrink: 0;
 }
 
-/* Stats */
 .dv-stats {
-  display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 20px;
+  display: grid; grid-template-columns: repeat(5,1fr); gap: 10px; margin-bottom: 20px;
 }
-@media (max-width: 700px) { .dv-stats { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 900px) { .dv-stats { grid-template-columns: repeat(3,1fr); } }
+@media (max-width: 600px) { .dv-stats { grid-template-columns: 1fr 1fr; } }
 
 .dv-stat {
   background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
@@ -325,17 +456,14 @@ const dvCss = `
 .dv-stat-val { font-size: 30px; font-weight: 800; color: #e8e8e7; line-height: 1; margin-bottom: 5px; }
 .dv-stat-lbl { font-size: 12px; font-weight: 600; color: #7a7a8a; }
 
-/* Grid */
 .dv-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto auto;
   gap: 14px;
 }
 @media (max-width: 700px) { .dv-grid { grid-template-columns: 1fr; } }
 .dv-panel--wide { grid-column: 1 / -1; }
 
-/* Panel */
 .dv-panel {
   background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
   border-radius: 14px; padding: 16px;
@@ -346,7 +474,6 @@ const dvCss = `
 .dv-panel-title { font-size: 13px; font-weight: 700; color: #d4d4d3; }
 .dv-tasks-left { font-size: 11px; color: #7a7a8a; background: rgba(255,255,255,0.06); border-radius: 4px; padding: 2px 7px; }
 
-/* Inputs */
 .dv-input {
   box-sizing: border-box;
   background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.09);
@@ -357,7 +484,7 @@ const dvCss = `
 .dv-input::placeholder { color: #5a5a6a; }
 .dv-lbl { display: block; font-size: 10px; font-weight: 700; color: #7a7a8a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
 .dv-ff { display: flex; flex-direction: column; flex: 1; min-width: 0; }
-.dv-ff--sm { flex: 0 0 140px; }
+.dv-ff--sm { flex: 0 0 150px; }
 .dv-ff .dv-input { width: 100%; }
 
 .dv-btn-ghost {
@@ -380,14 +507,12 @@ const dvCss = `
 }
 .dv-btn-add:hover { opacity: 0.9; }
 
-/* Payment form */
 .dv-pay-form {
   background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
   border-radius: 10px; padding: 14px; margin-bottom: 14px;
 }
 .dv-pay-form-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
 
-/* Payment list */
 .dv-pay-list { display: flex; flex-direction: column; gap: 6px; }
 .dv-pay-row {
   display: flex; align-items: center; gap: 10px;
@@ -397,13 +522,14 @@ const dvCss = `
 }
 .dv-pay-row--urgent { border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.04); }
 .dv-pay-row--overdue { border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.04); }
+
 .dv-pay-left { flex: 1; min-width: 0; }
 .dv-pay-name { font-size: 13px; font-weight: 600; color: #e2e2e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dv-pay-notes { font-size: 11px; color: #7a7a8a; margin-top: 1px; }
 .dv-pay-mid { flex-shrink: 0; text-align: right; }
 .dv-pay-amount { font-size: 14px; font-weight: 700; color: #86efac; }
 .dv-pay-mo { font-size: 10px; color: #7a7a8a; margin-left: 2px; }
-.dv-pay-right { flex-shrink: 0; text-align: right; }
+.dv-pay-right { flex-shrink: 0; text-align: right; min-width: 110px; }
 .dv-pay-due { font-size: 12px; font-weight: 600; color: #d4d4d3; }
 .dv-pay-due--urgent { color: #fcd34d; }
 .dv-pay-due--overdue { color: #f87171; }
@@ -413,6 +539,21 @@ const dvCss = `
   font-size: 18px; line-height: 1; padding: 0 2px; flex-shrink: 0;
 }
 .dv-pay-del:hover { color: #f87171; }
+
+/* Trial progress bar */
+.dv-trial-mid { flex: 1; padding: 0 12px; min-width: 0; }
+.dv-trial-bar-wrap {
+  height: 6px; background: rgba(255,255,255,0.06);
+  border-radius: 999px; overflow: hidden; margin-bottom: 4px;
+}
+.dv-trial-bar {
+  height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, #8b5cf6, #60a5fa);
+  transition: width 0.4s ease;
+}
+.dv-trial-bar--urgent { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+.dv-trial-bar--expired { background: #ef4444; }
+.dv-trial-bar-lbl { font-size: 10px; color: #7a7a8a; }
 
 /* Tasks */
 .dv-task-input { display: flex; gap: 6px; margin-bottom: 10px; }
